@@ -1,9 +1,11 @@
-const supabase = require('../config/supabase');
+import { Request, Response, NextFunction } from 'express';
+import supabase from '../config/supabase';
+import { AuthenticatedRequest, AuthResponse } from '../types';
 
 /**
  * Register a new user
  */
-const signup = async (req, res, next) => {
+export const signup = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
   try {
     const { email, password, username } = req.body;
     
@@ -35,7 +37,7 @@ const signup = async (req, res, next) => {
 /**
  * Login a user
  */
-const login = async (req, res, next) => {
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
   try {
     const { email, password } = req.body;
     
@@ -65,7 +67,7 @@ const login = async (req, res, next) => {
 /**
  * Logout the current user
  */
-const logout = async (req, res, next) => {
+export const logout = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
   try {
     const { error } = await supabase.auth.signOut();
     
@@ -82,17 +84,10 @@ const logout = async (req, res, next) => {
 /**
  * Get current user
  */
-const getUser = async (req, res, next) => {
+export const getUser = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
   try {
-    return res.status(200).json({ user: req.user });
+    return res.status(200).json({ message: 'User retrieved successfully', user: req.user });
   } catch (error) {
     next(error);
   }
-};
-
-module.exports = {
-  signup,
-  login,
-  logout,
-  getUser
 };

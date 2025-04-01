@@ -1,9 +1,11 @@
-const supabase = require('../config/supabase');
+import { Request, Response, NextFunction } from 'express';
+import supabase from '../config/supabase';
+import { AuthenticatedRequest } from '../types';
 
 /**
  * Middleware to authenticate user requests
  */
-const authenticate = async (req, res, next) => {
+export const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void | Response> => {
   const token = req.headers.authorization?.split(' ')[1];
   
   if (!token) {
@@ -23,5 +25,3 @@ const authenticate = async (req, res, next) => {
     return res.status(500).json({ error: 'Authentication failed' });
   }
 };
-
-module.exports = { authenticate };

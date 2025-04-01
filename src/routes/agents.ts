@@ -1,6 +1,8 @@
-const express = require('express');
-const supabase = require('../config/supabase');
-const { authenticate } = require('../middleware/auth');
+import express, { Request, Response } from 'express';
+import supabase from '../config/supabase';
+import { authenticate } from '../middleware/auth';
+import { Agent, AgentResponse, AuthenticatedRequest, Company, DbAgent, DbCompany } from '../types';
+
 const router = express.Router();
 
 /**
@@ -84,11 +86,17 @@ const router = express.Router();
  *                   items:
  *                     $ref: '#/components/schemas/Agent'
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = parseInt(req.query.offset) || 0;
-    const userId = req.headers.authorization ? (await supabase.auth.getUser(req.headers.authorization.split(' ')[1]))?.data?.user?.id : null;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = parseInt(req.query.offset as string) || 0;
+    let userId: string | null = null;
+    
+    if (req.headers.authorization) {
+      const token = req.headers.authorization.split(' ')[1];
+      const { data } = await supabase.auth.getUser(token);
+      userId = data?.user?.id || null;
+    }
 
     // Get all agents without is_public filter since the column doesn't exist
     const { data: agents, error } = await supabase
@@ -100,9 +108,9 @@ router.get('/', async (req, res) => {
     if (error) throw error;
     
     // Get company data separately for agents with company_id
-    const agentsWithCompanies = await Promise.all(
-      agents.map(async (agent) => {
-        let company = null;
+    const agentsWithCompanies: Agent[] = await Promise.all(
+      agents.map(async (agent: DbAgent) => {
+        let company: Company | null = null;
         
         if (agent.company_id) {
           const { data: companyData, error: companyError } = await supabase
@@ -112,12 +120,13 @@ router.get('/', async (req, res) => {
             .single();
             
           if (!companyError && companyData) {
+            const dbCompany = companyData as DbCompany;
             company = {
-              id: companyData.id,
-              name: companyData.name,
-              logoUrl: companyData.logo_url,
-              isVerified: companyData.is_verified,
-              isEnterprise: companyData.is_enterprise
+              id: dbCompany.id,
+              name: dbCompany.name,
+              logoUrl: dbCompany.logo_url,
+              isVerified: dbCompany.is_verified,
+              isEnterprise: dbCompany.is_enterprise
             };
           }
         }
@@ -141,7 +150,7 @@ router.get('/', async (req, res) => {
     );
     
     res.status(200).json({ agents: agentsWithCompanies });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -168,10 +177,16 @@ router.get('/', async (req, res) => {
  *       404:
  *         description: Agent not found
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.headers.authorization ? (await supabase.auth.getUser(req.headers.authorization.split(' ')[1]))?.data?.user?.id : null;
+    let userId: string | null = null;
+    
+    if (req.headers.authorization) {
+      const token = req.headers.authorization.split(' ')[1];
+      const { data } = await supabase.auth.getUser(token);
+      userId = data?.user?.id || null;
+    }
     
     // Increment views counter
     await supabase.rpc('increment_agent_views', { agent_id: id });
@@ -187,45 +202,48 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
     
+    const dbAgent = agent as DbAgent;
+    
     // Get company data if agent has company_id
-    let company = null;
-    if (agent.company_id) {
+    let company: Company | null = null;
+    if (dbAgent.company_id) {
       const { data: companyData, error: companyError } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', agent.company_id)
+        .eq('id', dbAgent.company_id)
         .single();
         
       if (!companyError && companyData) {
+        const dbCompany = companyData as DbCompany;
         company = {
-          id: companyData.id,
-          name: companyData.name,
-          logoUrl: companyData.logo_url,
-          isVerified: companyData.is_verified,
-          isEnterprise: companyData.is_enterprise
+          id: dbCompany.id,
+          name: dbCompany.name,
+          logoUrl: dbCompany.logo_url,
+          isVerified: dbCompany.is_verified,
+          isEnterprise: dbCompany.is_enterprise
         };
       }
     }
     
     // Format the response
-    const formattedAgent = {
-      id: agent.id,
-      name: agent.name,
-      description: agent.description,
-      imageUrl: agent.image_url,
-      isPro: agent.is_pro,
-      likes: agent.likes || 0,
-      views: agent.views || 0,
-      rating: agent.rating || 0,
-      usageCount: agent.usage_count || 0,
-      capabilities: agent.capabilities || [],
+    const formattedAgent: Agent = {
+      id: dbAgent.id,
+      name: dbAgent.name,
+      description: dbAgent.description,
+      imageUrl: dbAgent.image_url,
+      isPro: dbAgent.is_pro,
+      likes: dbAgent.likes || 0,
+      views: dbAgent.views || 0,
+      rating: dbAgent.rating || 0,
+      usageCount: dbAgent.usage_count || 0,
+      capabilities: dbAgent.capabilities || [],
       company,
-      createdAt: agent.created_at,
-      isOwner: userId ? agent.creator_id === userId : false
+      createdAt: dbAgent.created_at,
+      isOwner: userId ? dbAgent.creator_id === userId : false
     };
     
     res.status(200).json(formattedAgent);
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -278,7 +296,7 @@ router.get('/:id', async (req, res) => {
  *       400:
  *         description: Invalid input
  */
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { 
       name, 
@@ -287,34 +305,33 @@ router.post('/', authenticate, async (req, res) => {
       isPro, 
       capabilities = [], 
       company = null 
-    } = req.body;
+    }: Agent = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
     }
     
     // Create insert object
-    const agentData = {
+    const agentData: Partial<DbAgent> = {
       name,
       description,
       image_url: imageUrl,
       is_pro: isPro || false,
       capabilities,
-      company_id: company?.id || null,
+      company_id: company?.id || undefined, // Change `null` to `undefined`
       likes: 0,
       views: 0,
       rating: 0,
       usage_count: 0
     };
     
-    // Add creator_id separately to handle possible schema cache issues
-    try {
+    // Add creator_id if user exists
+    if (req.user?.id) {
       agentData.creator_id = req.user.id;
-    } catch (error) {
-      console.warn('Could not set creator_id, continuing without it:', error.message);
     }
     
     // Insert agent
+    let insertedAgent: DbAgent;
     const { data: agent, error } = await supabase
       .from('agents')
       .insert(agentData)
@@ -332,7 +349,7 @@ router.post('/', authenticate, async (req, res) => {
             image_url: imageUrl,
             is_pro: isPro || false,
             capabilities,
-            company_id: company?.id || null,
+            company_id: company?.id || undefined, // Change `null` to `undefined`
             likes: 0,
             views: 0,
             rating: 0,
@@ -342,35 +359,44 @@ router.post('/', authenticate, async (req, res) => {
           .single();
           
         if (fallbackError) throw fallbackError;
-        agent = fallbackAgent;
+        insertedAgent = fallbackAgent as DbAgent;
       } else {
         throw error;
       }
+    } else {
+      insertedAgent = agent as DbAgent;
     }
     
     // If a new company was provided without an ID, create it
     if (company && !company.id && company.name) {
+      const companyData: Partial<DbCompany> = {
+        name: company.name,
+        logo_url: company.logoUrl,
+        is_verified: company.isVerified || false,
+        is_enterprise: company.isEnterprise || false
+      };
+      
+      if (req.user?.id) {
+        companyData.creator_id = req.user.id;
+      }
+      
       const { data: newCompany, error: companyError } = await supabase
         .from('companies')
-        .insert({
-          name: company.name,
-          logo_url: company.logoUrl,
-          is_verified: company.isVerified || false,
-          is_enterprise: company.isEnterprise || false,
-          creator_id: req.user.id
-        })
+        .insert(companyData)
         .select()
         .single();
         
       if (companyError) throw companyError;
       
+      const newDbCompany = newCompany as DbCompany;
+      
       // Update the agent with the new company ID
       const { error: updateError } = await supabase
         .from('agents')
         .update({
-          company_id: newCompany.id
+          company_id: newDbCompany.id
         })
-        .eq('id', agent.id);
+        .eq('id', insertedAgent.id);
         
       if (updateError) throw updateError;
       
@@ -378,56 +404,64 @@ router.post('/', authenticate, async (req, res) => {
       const { data: updatedAgent, error: getError } = await supabase
         .from('agents')
         .select('*')
-        .eq('id', agent.id)
+        .eq('id', insertedAgent.id)
         .single();
         
       if (getError) throw getError;
       
+      const dbUpdatedAgent = updatedAgent as DbAgent;
+      
       // Format the response
-      const formattedAgent = {
-        id: updatedAgent.id,
-        name: updatedAgent.name,
-        description: updatedAgent.description,
-        imageUrl: updatedAgent.image_url,
-        isPro: updatedAgent.is_pro,
-        likes: updatedAgent.likes || 0,
-        views: updatedAgent.views || 0,
-        rating: updatedAgent.rating || 0,
-        usageCount: updatedAgent.usage_count || 0,
-        capabilities: updatedAgent.capabilities || [],
+      const formattedAgent: Agent = {
+        id: dbUpdatedAgent.id,
+        name: dbUpdatedAgent.name,
+        description: dbUpdatedAgent.description,
+        imageUrl: dbUpdatedAgent.image_url,
+        isPro: dbUpdatedAgent.is_pro,
+        likes: dbUpdatedAgent.likes || 0,
+        views: dbUpdatedAgent.views || 0,
+        rating: dbUpdatedAgent.rating || 0,
+        usageCount: dbUpdatedAgent.usage_count || 0,
+        capabilities: dbUpdatedAgent.capabilities || [],
         company: {
-          id: newCompany.id,
-          name: newCompany.name,
-          logoUrl: newCompany.logo_url,
-          isVerified: newCompany.is_verified,
-          isEnterprise: newCompany.is_enterprise
+          id: newDbCompany.id,
+          name: newDbCompany.name,
+          logoUrl: newDbCompany.logo_url,
+          isVerified: newDbCompany.is_verified,
+          isEnterprise: newDbCompany.is_enterprise
         },
-        createdAt: updatedAgent.created_at,
+        createdAt: dbUpdatedAgent.created_at,
         isOwner: true
       };
       
-      return res.status(201).json({ message: 'Agent created successfully', agent: formattedAgent });
+      return res.status(201).json({ 
+        message: 'Agent created successfully', 
+        agent: formattedAgent 
+      } as AgentResponse);
     }
     
     // Format the response for agent without new company
-    const formattedAgent = {
-      id: agent.id,
-      name: agent.name,
-      description: agent.description,
-      imageUrl: agent.image_url,
-      isPro: agent.is_pro,
-      likes: agent.likes || 0,
-      views: agent.views || 0,
-      rating: agent.rating || 0,
-      usageCount: agent.usage_count || 0,
-      capabilities: agent.capabilities || [],
+    const formattedAgent: Agent = {
+      id: insertedAgent.id,
+      name: insertedAgent.name,
+      description: insertedAgent.description,
+      imageUrl: insertedAgent.image_url,
+      isPro: insertedAgent.is_pro,
+      likes: insertedAgent.likes || 0,
+      views: insertedAgent.views || 0,
+      rating: insertedAgent.rating || 0,
+      usageCount: insertedAgent.usage_count || 0,
+      capabilities: insertedAgent.capabilities || [],
       company: company,
-      createdAt: agent.created_at,
+      createdAt: insertedAgent.created_at,
       isOwner: true
     };
     
-    res.status(201).json({ message: 'Agent created successfully', agent: formattedAgent });
-  } catch (error) {
+    res.status(201).json({ 
+      message: 'Agent created successfully', 
+      agent: formattedAgent 
+    } as AgentResponse);
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -490,7 +524,7 @@ router.post('/', authenticate, async (req, res) => {
  *       404:
  *         description: Agent not found
  */
-router.put('/:id', authenticate, async (req, res) => {
+router.put('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { 
@@ -500,7 +534,7 @@ router.put('/:id', authenticate, async (req, res) => {
       isPro, 
       capabilities = [], 
       company = null
-    } = req.body;
+    }: Agent = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -517,7 +551,7 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
     
-    if (existingAgent.creator_id !== req.user.id) {
+    if (req.user && existingAgent.creator_id !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized to update this agent' });
     }
     
@@ -530,7 +564,7 @@ router.put('/:id', authenticate, async (req, res) => {
         image_url: imageUrl,
         is_pro: isPro || false,
         capabilities,
-        company_id: company?.id || null,
+        company_id: company?.id || undefined, // Change `null` to `undefined`
         updated_at: new Date().toISOString()
       })
       .eq('id', id);
@@ -538,36 +572,43 @@ router.put('/:id', authenticate, async (req, res) => {
     if (updateError) throw updateError;
     
     // Create new company if needed
-    let companyData = null;
+    let companyData: Company | null = null;
     if (company && !company.id && company.name) {
+      const newCompanyData: Partial<DbCompany> = {
+        name: company.name,
+        logo_url: company.logoUrl,
+        is_verified: company.isVerified || false,
+        is_enterprise: company.isEnterprise || false
+      };
+      
+      if (req.user?.id) {
+        newCompanyData.creator_id = req.user.id;
+      }
+      
       const { data: newCompany, error: companyError } = await supabase
         .from('companies')
-        .insert({
-          name: company.name,
-          logo_url: company.logoUrl,
-          is_verified: company.isVerified || false,
-          is_enterprise: company.isEnterprise || false,
-          creator_id: req.user.id
-        })
+        .insert(newCompanyData)
         .select()
         .single();
         
       if (companyError) throw companyError;
       
+      const newDbCompany = newCompany as DbCompany;
+      
       // Update the agent with the new company ID
       await supabase
         .from('agents')
         .update({
-          company_id: newCompany.id
+          company_id: newDbCompany.id
         })
         .eq('id', id);
       
       companyData = {
-        id: newCompany.id,
-        name: newCompany.name,
-        logoUrl: newCompany.logo_url,
-        isVerified: newCompany.is_verified,
-        isEnterprise: newCompany.is_enterprise
+        id: newDbCompany.id,
+        name: newDbCompany.name,
+        logoUrl: newDbCompany.logo_url,
+        isVerified: newDbCompany.is_verified,
+        isEnterprise: newDbCompany.is_enterprise
       };
     } 
     // Get company data if needed
@@ -579,12 +620,13 @@ router.put('/:id', authenticate, async (req, res) => {
         .single();
         
       if (!companyError && existingCompany) {
+        const dbExistingCompany = existingCompany as DbCompany;
         companyData = {
-          id: existingCompany.id,
-          name: existingCompany.name,
-          logoUrl: existingCompany.logo_url,
-          isVerified: existingCompany.is_verified,
-          isEnterprise: existingCompany.is_enterprise
+          id: dbExistingCompany.id,
+          name: dbExistingCompany.name,
+          logoUrl: dbExistingCompany.logo_url,
+          isVerified: dbExistingCompany.is_verified,
+          isEnterprise: dbExistingCompany.is_enterprise
         };
       }
     }
@@ -598,25 +640,30 @@ router.put('/:id', authenticate, async (req, res) => {
       
     if (getError) throw getError;
     
+    const dbUpdatedAgent = updatedAgent as DbAgent;
+    
     // Return formatted agent
-    const formattedAgent = {
-      id: updatedAgent.id,
-      name: updatedAgent.name,
-      description: updatedAgent.description,
-      imageUrl: updatedAgent.image_url,
-      isPro: updatedAgent.is_pro,
-      likes: updatedAgent.likes || 0,
-      views: updatedAgent.views || 0,
-      rating: updatedAgent.rating || 0,
-      usageCount: updatedAgent.usage_count || 0,
-      capabilities: updatedAgent.capabilities || [],
+    const formattedAgent: Agent = {
+      id: dbUpdatedAgent.id,
+      name: dbUpdatedAgent.name,
+      description: dbUpdatedAgent.description,
+      imageUrl: dbUpdatedAgent.image_url,
+      isPro: dbUpdatedAgent.is_pro,
+      likes: dbUpdatedAgent.likes || 0,
+      views: dbUpdatedAgent.views || 0,
+      rating: dbUpdatedAgent.rating || 0,
+      usageCount: dbUpdatedAgent.usage_count || 0,
+      capabilities: dbUpdatedAgent.capabilities || [],
       company: companyData || company,
-      createdAt: updatedAgent.created_at,
+      createdAt: dbUpdatedAgent.created_at,
       isOwner: true
     };
     
-    res.status(200).json({ message: 'Agent updated successfully', agent: formattedAgent });
-  } catch (error) {
+    res.status(200).json({ 
+      message: 'Agent updated successfully', 
+      agent: formattedAgent 
+    } as AgentResponse);
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -675,10 +722,10 @@ router.put('/:id', authenticate, async (req, res) => {
  *       404:
  *         description: Agent not found
  */
-router.patch('/:id', authenticate, async (req, res) => {
+router.patch('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates: Partial<Agent> = req.body;
     
     // Check if user owns this agent
     const { data: existingAgent, error: checkError } = await supabase
@@ -691,12 +738,12 @@ router.patch('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
     
-    if (existingAgent.creator_id !== req.user.id) {
+    if (req.user && existingAgent.creator_id !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized to update this agent' });
     }
     
     // Prepare update object
-    const updateData = {};
+    const updateData: Partial<DbAgent> = {};
     if (updates.name !== undefined) updateData.name = updates.name;
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.imageUrl !== undefined) updateData.image_url = updates.imageUrl;
@@ -715,36 +762,43 @@ router.patch('/:id', authenticate, async (req, res) => {
     if (updateError) throw updateError;
     
     // Create new company if needed
-    let companyData = null;
+    let companyData: Company | null = null;
     if (updates.company && !updates.company.id && updates.company.name) {
+      const newCompanyData: Partial<DbCompany> = {
+        name: updates.company.name,
+        logo_url: updates.company.logoUrl,
+        is_verified: updates.company.isVerified || false,
+        is_enterprise: updates.company.isEnterprise || false
+      };
+      
+      if (req.user?.id) {
+        newCompanyData.creator_id = req.user.id;
+      }
+      
       const { data: newCompany, error: companyError } = await supabase
         .from('companies')
-        .insert({
-          name: updates.company.name,
-          logo_url: updates.company.logoUrl,
-          is_verified: updates.company.isVerified || false,
-          is_enterprise: updates.company.isEnterprise || false,
-          creator_id: req.user.id
-        })
+        .insert(newCompanyData)
         .select()
         .single();
         
       if (companyError) throw companyError;
       
+      const newDbCompany = newCompany as DbCompany;
+      
       // Update the agent with the new company ID
       await supabase
         .from('agents')
         .update({
-          company_id: newCompany.id
+          company_id: newDbCompany.id
         })
         .eq('id', id);
       
       companyData = {
-        id: newCompany.id,
-        name: newCompany.name,
-        logoUrl: newCompany.logo_url,
-        isVerified: newCompany.is_verified,
-        isEnterprise: newCompany.is_enterprise
+        id: newDbCompany.id,
+        name: newDbCompany.name,
+        logoUrl: newDbCompany.logo_url,
+        isVerified: newDbCompany.is_verified,
+        isEnterprise: newDbCompany.is_enterprise
       };
     } 
     // Get company data if needed
@@ -756,12 +810,13 @@ router.patch('/:id', authenticate, async (req, res) => {
         .single();
         
       if (!companyError && existingCompany) {
+        const dbExistingCompany = existingCompany as DbCompany;
         companyData = {
-          id: existingCompany.id,
-          name: existingCompany.name,
-          logoUrl: existingCompany.logo_url,
-          isVerified: existingCompany.is_verified,
-          isEnterprise: existingCompany.is_enterprise
+          id: dbExistingCompany.id,
+          name: dbExistingCompany.name,
+          logoUrl: dbExistingCompany.logo_url,
+          isVerified: dbExistingCompany.is_verified,
+          isEnterprise: dbExistingCompany.is_enterprise
         };
       }
     }
@@ -775,44 +830,50 @@ router.patch('/:id', authenticate, async (req, res) => {
       
     if (getError) throw getError;
     
+    const dbUpdatedAgent = updatedAgent as DbAgent;
+    
     // Get company data if needed and not already fetched
-    if (!companyData && updatedAgent.company_id) {
+    if (!companyData && dbUpdatedAgent.company_id) {
       const { data: companyData2, error: companyError } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', updatedAgent.company_id)
+        .eq('id', dbUpdatedAgent.company_id)
         .single();
         
       if (!companyError && companyData2) {
+        const dbCompany2 = companyData2 as DbCompany;
         companyData = {
-          id: companyData2.id,
-          name: companyData2.name,
-          logoUrl: companyData2.logo_url,
-          isVerified: companyData2.is_verified,
-          isEnterprise: companyData2.is_enterprise
+          id: dbCompany2.id,
+          name: dbCompany2.name,
+          logoUrl: dbCompany2.logo_url,
+          isVerified: dbCompany2.is_verified,
+          isEnterprise: dbCompany2.is_enterprise
         };
       }
     }
     
     // Return formatted agent
-    const formattedAgent = {
-      id: updatedAgent.id,
-      name: updatedAgent.name,
-      description: updatedAgent.description,
-      imageUrl: updatedAgent.image_url,
-      isPro: updatedAgent.is_pro,
-      likes: updatedAgent.likes || 0,
-      views: updatedAgent.views || 0,
-      rating: updatedAgent.rating || 0,
-      usageCount: updatedAgent.usage_count || 0,
-      capabilities: updatedAgent.capabilities || [],
+    const formattedAgent: Agent = {
+      id: dbUpdatedAgent.id,
+      name: dbUpdatedAgent.name,
+      description: dbUpdatedAgent.description,
+      imageUrl: dbUpdatedAgent.image_url,
+      isPro: dbUpdatedAgent.is_pro,
+      likes: dbUpdatedAgent.likes || 0,
+      views: dbUpdatedAgent.views || 0,
+      rating: dbUpdatedAgent.rating || 0,
+      usageCount: dbUpdatedAgent.usage_count || 0,
+      capabilities: dbUpdatedAgent.capabilities || [],
       company: companyData,
-      createdAt: updatedAgent.created_at,
+      createdAt: dbUpdatedAgent.created_at,
       isOwner: true
     };
     
-    res.status(200).json({ message: 'Agent updated successfully', agent: formattedAgent });
-  } catch (error) {
+    res.status(200).json({ 
+      message: 'Agent updated successfully', 
+      agent: formattedAgent 
+    } as AgentResponse);
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -839,7 +900,7 @@ router.patch('/:id', authenticate, async (req, res) => {
  *       404:
  *         description: Agent not found
  */
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -854,7 +915,7 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Agent not found' });
     }
     
-    if (existingAgent.creator_id !== req.user.id) {
+    if (req.user && existingAgent.creator_id !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized to delete this agent' });
     }
     
@@ -867,7 +928,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     if (deleteError) throw deleteError;
     
     res.status(200).json({ message: 'Agent deleted successfully' });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -890,7 +951,7 @@ router.delete('/:id', authenticate, async (req, res) => {
  *       404:
  *         description: Agent not found
  */
-router.post('/:id/like', async (req, res) => {
+router.post('/:id/like', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -909,9 +970,9 @@ router.post('/:id/like', async (req, res) => {
     await supabase.rpc('like_agent', { agent_id: id });
     
     res.status(200).json({ message: 'Agent liked successfully' });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-module.exports = router;
+export default router;

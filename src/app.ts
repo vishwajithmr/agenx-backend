@@ -1,9 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const routes = require('./routes');
-const errorHandler = require('./middleware/errorHandler');
-const { serve, setup } = require('./docs/swagger');
-require('dotenv').config();
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import routes from './routes';
+import errorHandler from './middleware/errorHandler';
+import { serve, setup } from './docs/swagger';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = express();
 
@@ -19,7 +21,7 @@ app.use('/api-docs', serve, setup);
 app.use('/api', routes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
@@ -27,8 +29,8 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 // 404 handler
-app.use((req, res) => {
+app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-module.exports = app;
+export default app;

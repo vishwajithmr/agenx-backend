@@ -1,7 +1,13 @@
+import { Request, Response, NextFunction } from 'express';
+
+interface AppError extends Error {
+  statusCode?: number;
+}
+
 /**
  * Global error handler
  */
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err: AppError, req: Request, res: Response, next: NextFunction): void => {
   console.error(err.stack);
   
   const statusCode = err.statusCode || 500;
@@ -15,4 +21,4 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-module.exports = errorHandler;
+export default errorHandler;
