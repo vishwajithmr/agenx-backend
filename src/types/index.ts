@@ -3,6 +3,7 @@ import { SupabaseClient, User } from '@supabase/supabase-js';
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
+  [key: string]: any;
 }
 
 export interface Company {

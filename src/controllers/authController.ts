@@ -214,12 +214,11 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Get user profile from database
-    const { data: profile, error: profileError } = await supabase
+    // Get user profile from database - Remove single() to handle missing profiles
+    const { data: profiles, error: profileError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', userId)
-      .single();
+      .eq('id', userId);
 
     if (profileError) {
       console.error('Error fetching user profile:', profileError);
@@ -232,6 +231,49 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       });
     }
 
+    // If no profile found, create a basic one from auth data
+    if (!profiles || profiles.length === 0) {
+      // Get email from auth user
+      const { data: authUser } = await supabase.auth.getUser();
+      
+      // Create a new profile
+      const { data: newProfile, error: insertError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          email: authUser?.user?.email || 'user@example.com',
+          name: authUser?.user?.email?.split('@')[0] || 'User'
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('Error creating user profile:', insertError);
+        return res.status(200).json({
+          success: true,
+          user: {
+            id: userId,
+            email: authUser?.user?.email || 'user@example.com',
+            name: authUser?.user?.email?.split('@')[0] || 'User',
+            createdAt: new Date().toISOString()
+          }
+        });
+      }
+      
+      return res.status(200).json({
+        success: true,
+        user: {
+          id: newProfile.id,
+          email: newProfile.email,
+          name: newProfile.name,
+          avatar: newProfile.avatar_url,
+          createdAt: newProfile.created_at
+        }
+      });
+    }
+
+    const profile = profiles[0];
+    
     return res.status(200).json({
       success: true,
       user: {

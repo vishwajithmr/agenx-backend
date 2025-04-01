@@ -335,22 +335,50 @@ export const submitReview = async (req: Request, res: Response) => {
       }
     }
     
-    const { data: userData, error: userError } = await supabase
+    // Get user data - Remove single() to handle missing profiles
+    const { data: users, error: userError } = await supabase
       .from('users')
       .select('id, name, avatar_url')
-      .eq('id', userId)
-      .single();
+      .eq('id', userId);
+    
+    let userData = null;
     
     if (userError) {
       console.error('Error fetching user data:', userError);
+    } else if (users && users.length > 0) {
+      userData = users[0];
+    }
+    
+    // If no user profile found, get basic data from auth user
+    if (!userData) {
+      // Get email from auth user
+      const { data: authUser } = await supabase.auth.getUser();
+      userData = {
+        id: userId,
+        name: authUser?.user?.email?.split('@')[0] || 'User',
+        avatar_url: null
+      };
+      
+      // Try to create a basic profile
+      try {
+        await supabase
+          .from('users')
+          .insert({
+            id: userId,
+            email: authUser?.user?.email || 'user@example.com',
+            name: userData.name
+          });
+      } catch (insertError) {
+        console.error('Error creating user profile:', insertError);
+      }
     }
     
     const reviewResponse: ReviewResponse = {
       id: reviewData.id,
       author: {
-        id: userData?.id || userId,
-        name: userData?.name || 'User',
-        avatar: userData?.avatar_url,
+        id: userData.id,
+        name: userData.name,
+        avatar: userData.avatar_url,
         isVerified: true,
         isCurrentUser: true,
       },
@@ -607,6 +635,118 @@ export const editReview = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error in editReview:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred',
+      },
+    });
+  }
+};
+
+/**
+ * Delete a review
+ */
+export const deleteReview = async (req: Request, res: Response) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'unauthorized',
+          message: 'You must be logged in to delete a review',
+        },
+      });
+    }
+    
+    // Check if review exists and if the user is the author
+    const { data: review, error: reviewError } = await supabase
+      .from('reviews')
+      .select('id, user_id')
+      .eq('id', reviewId)
+      .single();
+    
+    if (reviewError || !review) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'not_found',
+          message: 'Review not found',
+        },
+      });
+    }
+    
+    if (review.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'forbidden',
+          message: 'You are not authorized to delete this review',
+        },
+      });
+    }
+    
+    // Delete review images first (they will be cascade deleted by Supabase,
+    // but we'll explicitly delete them to ensure clean up)
+    const { error: deleteImagesError } = await supabase
+      .from('review_images')
+      .delete()
+      .eq('review_id', reviewId);
+    
+    if (deleteImagesError) {
+      console.error('Error deleting review images:', deleteImagesError);
+      // Continue with deletion even if image deletion fails
+    }
+    
+    // Delete review votes
+    const { error: deleteVotesError } = await supabase
+      .from('review_votes')
+      .delete()
+      .eq('review_id', reviewId);
+    
+    if (deleteVotesError) {
+      console.error('Error deleting review votes:', deleteVotesError);
+      // Continue with deletion even if votes deletion fails
+    }
+    
+    // Delete review replies
+    const { error: deleteRepliesError } = await supabase
+      .from('review_replies')
+      .delete()
+      .eq('review_id', reviewId);
+    
+    if (deleteRepliesError) {
+      console.error('Error deleting review replies:', deleteRepliesError);
+      // Continue with deletion even if replies deletion fails
+    }
+    
+    // Delete the review
+    const { error: deleteReviewError } = await supabase
+      .from('reviews')
+      .delete()
+      .eq('id', reviewId);
+    
+    if (deleteReviewError) {
+      console.error('Error deleting review:', deleteReviewError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'database_error',
+          message: 'Error deleting review',
+        },
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Review deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error in deleteReview:', error);
     return res.status(500).json({
       success: false,
       error: {

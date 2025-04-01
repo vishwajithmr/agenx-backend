@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import { AuthenticatedRequest } from '../types';
 
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
   // Get the token from the Authorization header
@@ -31,7 +32,7 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
     }
 
     // Attach the user to the request
-    req.user = user;
+    (req as AuthenticatedRequest).user = user;
     next();
   } catch (error) {
     console.error('Authentication error:', error);

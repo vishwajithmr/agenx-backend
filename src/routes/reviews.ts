@@ -3,7 +3,8 @@ import {
   getReviewSummary,
   getReviews,
   submitReview,
-  editReview
+  editReview,
+  deleteReview
 } from '../controllers/reviewController';
 import { authenticateUser } from '../middleware/auth';
 
@@ -46,7 +47,7 @@ const router = express.Router();
  *       200:
  *         description: List of reviews
  */
-router.get('/:agentId/reviews', getReviews);
+router.get('/agents/:agentId/reviews', getReviews);
 
 /**
  * @swagger
@@ -63,7 +64,7 @@ router.get('/:agentId/reviews', getReviews);
  *       200:
  *         description: Review summary statistics
  */
-router.get('/:agentId/reviews/summary', getReviewSummary);
+router.get('/agents/:agentId/reviews/summary', getReviewSummary);
 
 /**
  * @swagger
@@ -88,7 +89,7 @@ router.get('/:agentId/reviews/summary', getReviewSummary);
  *       201:
  *         description: Review created successfully
  */
-router.post('/:agentId/reviews', authenticateUser, submitReview);
+router.post('/agents/:agentId/reviews', authenticateUser, submitReview);
 
 /**
  * @swagger
@@ -114,5 +115,30 @@ router.post('/:agentId/reviews', authenticateUser, submitReview);
  *         description: Review updated successfully
  */
 router.put('/reviews/:reviewId', authenticateUser, editReview);
+
+/**
+ * @swagger
+ * /reviews/{reviewId}:
+ *   delete:
+ *     summary: Delete a review
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reviewId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Review deleted successfully
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized to delete this review
+ *       404:
+ *         description: Review not found
+ */
+router.delete('/reviews/:reviewId', authenticateUser, deleteReview);
 
 export default router;
