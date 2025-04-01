@@ -83,15 +83,130 @@ export const getReviewSummary = async (req: Request, res: Response) => {
 export const getReviews = async (req: Request, res: Response) => {
   try {
     const { agentId } = req.params;
-    const { page = 1, limit = 10, sort = 'newest' } = req.query;
-
-    // Fetch reviews logic
-    // ...existing code...
-
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const sort = req.query.sort as string || 'newest';
+    const rating = req.query.rating ? parseInt(req.query.rating as string) : undefined;
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+    
+    // Build query - Fix the review_votes selection by explicitly selecting only needed fields
+    let query = supabase
+      .from('reviews')
+      .select(`
+        *,
+        users:user_id (*), 
+        images:review_images (id, url, thumbnail_url),
+        replies:review_replies (
+          id, content, created_at,
+          user:user_id (*)
+        ),
+        votes:review_votes (user_id, vote)
+      `, { count: 'exact' })
+      .eq('agent_id', agentId);
+    
+    // Add rating filter if provided
+    if (rating !== undefined) {
+      query = query.eq('rating', rating);
+    }
+    
+    // Add sorting
+    switch (sort) {
+      case 'oldest':
+        query = query.order('created_at', { ascending: true });
+        break;
+      case 'highest':
+        query = query.order('rating', { ascending: false });
+        break;
+      case 'lowest':
+        query = query.order('rating', { ascending: true });
+        break;
+      case 'most_helpful':
+        query = query.order('upvotes', { ascending: false });
+        break;
+      case 'newest':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
+    }
+    
+    // Add pagination
+    query = query.range(offset, offset + limit - 1);
+    
+    // Execute query
+    const { data: reviews, error, count } = await query;
+    
+    if (error) {
+      console.error('Error fetching reviews:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'database_error',
+          message: 'Error fetching reviews',
+        },
+      });
+    }
+    
+    // Get current user ID if authenticated
+    const userId = req.user?.id;
+    
+    // Format reviews for response - Update to handle missing alt_text
+    const formattedReviews = reviews.map(review => {
+      const upvotes = review.votes?.filter(v => v.vote === 1).length || 0;
+      const downvotes = review.votes?.filter(v => v.vote === -1).length || 0;
+      const userVote = userId ? review.votes?.find(v => v.user_id === userId)?.vote || 0 : 0;
+      
+      return {
+        id: review.id,
+        author: {
+          id: review.users?.id,
+          name: review.users?.name,
+          avatar: review.users?.avatar_url,
+          isVerified: true,
+          isCurrentUser: review.users?.id === userId,
+        },
+        rating: review.rating,
+        date: review.created_at,
+        formattedDate: format(new Date(review.created_at), 'MMM d, yyyy'),
+        content: review.content,
+        replies: (review.replies || []).map(reply => ({
+          id: reply.id,
+          author: {
+            id: reply.user?.id,
+            name: reply.user?.name,
+            avatar: reply.user?.avatar_url,
+            isVerified: true,
+            isCurrentUser: reply.user?.id === userId,
+          },
+          date: reply.created_at,
+          formattedDate: format(new Date(reply.created_at), 'MMM d, yyyy'),
+          content: reply.content,
+        })),
+        replyCount: review.replies?.length || 0,
+        helpful: {
+          upvotes,
+          downvotes,
+          userVote,
+        },
+        additionalImages: (review.images || []).map(image => ({
+          id: image.id,
+          url: image.url,
+          thumbnailUrl: image.thumbnail_url,
+          alt: '', // Use empty string as default since alt_text might not exist
+        })),
+      };
+    });
+    
     return res.status(200).json({
       success: true,
-      reviews,
-      pagination,
+      reviews: formattedReviews,
+      pagination: {
+        total: count || 0,
+        page,
+        limit,
+        pages: Math.ceil((count || 0) / limit)
+      }
     });
   } catch (error) {
     console.error('Error in getReviews:', error);
@@ -124,7 +239,6 @@ export const submitReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Validate input
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({
         success: false,
@@ -155,7 +269,6 @@ export const submitReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Check if user has already reviewed this agent
     const { data: existingReview, error: existingError } = await supabase
       .from('reviews')
       .select('id')
@@ -173,10 +286,6 @@ export const submitReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Begin transaction to insert review and images
-    // Supabase doesn't support transactions via API, so we'll do sequential operations
-    
-    // Insert the review
     const { data: reviewData, error: reviewError } = await supabase
       .from('reviews')
       .insert({
@@ -199,27 +308,21 @@ export const submitReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Process and upload images if any
     const uploadedImages = [];
     if (images && images.length > 0) {
       for (const imageData of images) {
-        // For simplicity, assuming imageData is already a URL
-        // In a real app, you'd process base64 data and upload to storage
-        
         const { data: imageRecord, error: imageError } = await supabase
           .from('review_images')
           .insert({
             review_id: reviewData.id,
             url: imageData,
-            thumbnail_url: imageData, // In real app, generate thumbnail
-            alt_text: 'Review image',
+            thumbnail_url: imageData,
           })
           .select()
           .single();
         
         if (imageError) {
           console.error('Error uploading image:', imageError);
-          // Continue with other images even if one fails
           continue;
         }
         
@@ -227,12 +330,11 @@ export const submitReview = async (req: Request, res: Response) => {
           id: imageRecord.id,
           url: imageRecord.url,
           thumbnailUrl: imageRecord.thumbnail_url,
-          alt: imageRecord.alt_text,
+          alt: '', // Use empty string as default
         });
       }
     }
     
-    // Get user data to complete the response
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id, name, avatar_url')
@@ -241,10 +343,8 @@ export const submitReview = async (req: Request, res: Response) => {
     
     if (userError) {
       console.error('Error fetching user data:', userError);
-      // Continue anyway since the review is already created
     }
     
-    // Format response
     const reviewResponse: ReviewResponse = {
       id: reviewData.id,
       author: {
@@ -285,464 +385,6 @@ export const submitReview = async (req: Request, res: Response) => {
 };
 
 /**
- * Reply to a review
- */
-export const replyToReview = async (req: Request, res: Response) => {
-  try {
-    const { reviewId } = req.params;
-    const { content } = req.body;
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'unauthorized',
-          message: 'You must be logged in to reply to a review',
-        },
-      });
-    }
-    
-    // Validate input
-    if (!content || content.length < 10 || content.length > 1000) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'validation_error',
-          message: 'Reply content must be between 10 and 1000 characters',
-        },
-      });
-    }
-    
-    // Check if review exists
-    const { data: reviewData, error: reviewError } = await supabase
-      .from('reviews')
-      .select('id, user_id, agent_id')
-      .eq('id', reviewId)
-      .single();
-    
-    if (reviewError || !reviewData) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'not_found',
-          message: 'Review not found',
-        },
-      });
-    }
-    
-    // Check if user has already replied to this review
-    // Skip this check for agent owners (would need to check if user owns the agent)
-    const { data: existingReply, error: existingError } = await supabase
-      .from('review_replies')
-      .select('id')
-      .eq('review_id', reviewId)
-      .eq('user_id', userId)
-      .single();
-    
-    if (existingReply && userId !== reviewData.user_id) {
-      // Allow review author to reply multiple times
-      // In a real app, you'd also check if the user is the agent owner
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'already_replied',
-          message: 'You have already replied to this review',
-        },
-      });
-    }
-    
-    // Insert the reply
-    const { data: replyData, error: replyError } = await supabase
-      .from('review_replies')
-      .insert({
-        review_id: reviewId,
-        user_id: userId,
-        content,
-      })
-      .select()
-      .single();
-    
-    if (replyError) {
-      console.error('Error creating reply:', replyError);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'database_error',
-          message: 'Error creating reply',
-        },
-      });
-    }
-    
-    // Get user data
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, name, avatar_url')
-      .eq('id', userId)
-      .single();
-    
-    if (userError) {
-      console.error('Error fetching user data:', userError);
-    }
-    
-    // Check if user is the agent owner
-    // In a real app, you'd check if the user owns the agent
-    const isOfficial = false; // Placeholder for real logic
-    
-    return res.status(201).json({
-      success: true,
-      reviewId,
-      reply: {
-        id: replyData.id,
-        author: {
-          id: userData?.id || userId,
-          name: userData?.name || 'User',
-          avatar: userData?.avatar_url,
-          isVerified: true,
-          isCurrentUser: true,
-          isOfficial,
-        },
-        date: replyData.created_at,
-        formattedDate: format(new Date(replyData.created_at), 'MMM d, yyyy'),
-        content: replyData.content,
-      },
-    });
-  } catch (error) {
-    console.error('Error in replyToReview:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'server_error',
-        message: 'An unexpected error occurred',
-      },
-    });
-  }
-};
-
-/**
- * Vote on a review
- */
-export const voteReview = async (req: Request, res: Response) => {
-  try {
-    const { reviewId } = req.params;
-    const { vote } = req.body;
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'unauthorized',
-          message: 'You must be logged in to vote on a review',
-        },
-      });
-    }
-    
-    // Validate input
-    if (vote !== -1 && vote !== 0 && vote !== 1) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'validation_error',
-          message: 'Vote must be -1, 0, or 1',
-        },
-      });
-    }
-    
-    // Check if review exists and user is not the author
-    const { data: reviewData, error: reviewError } = await supabase
-      .from('reviews')
-      .select('id, user_id')
-      .eq('id', reviewId)
-      .single();
-    
-    if (reviewError || !reviewData) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'not_found',
-          message: 'Review not found',
-        },
-      });
-    }
-    
-    if (reviewData.user_id === userId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'self_vote',
-          message: 'You cannot vote on your own review',
-        },
-      });
-    }
-    
-    // Check if user has already voted
-    const { data: existingVote, error: existingError } = await supabase
-      .from('review_votes')
-      .select('id, vote')
-      .eq('review_id', reviewId)
-      .eq('user_id', userId)
-      .single();
-    
-    if (existingVote) {
-      // Update existing vote
-      if (vote === 0) {
-        // Delete the vote if setting to 0
-        const { error: deleteError } = await supabase
-          .from('review_votes')
-          .delete()
-          .eq('id', existingVote.id);
-        
-        if (deleteError) {
-          console.error('Error deleting vote:', deleteError);
-          return res.status(500).json({
-            success: false,
-            error: {
-              code: 'database_error',
-              message: 'Error updating vote',
-            },
-          });
-        }
-      } else if (existingVote.vote !== vote) {
-        // Update the vote if it's different
-        const { error: updateError } = await supabase
-          .from('review_votes')
-          .update({ vote })
-          .eq('id', existingVote.id);
-        
-        if (updateError) {
-          console.error('Error updating vote:', updateError);
-          return res.status(500).json({
-            success: false,
-            error: {
-              code: 'database_error',
-              message: 'Error updating vote',
-            },
-          });
-        }
-      }
-    } else if (vote !== 0) {
-      // Create new vote if not setting to 0
-      const { error: insertError } = await supabase
-        .from('review_votes')
-        .insert({
-          review_id: reviewId,
-          user_id: userId,
-          vote,
-        });
-      
-      if (insertError) {
-        console.error('Error creating vote:', insertError);
-        return res.status(500).json({
-          success: false,
-          error: {
-            code: 'database_error',
-            message: 'Error creating vote',
-          },
-        });
-      }
-    }
-    
-    // Get updated vote counts
-    const { data: votesData, error: votesError } = await supabase
-      .from('review_votes')
-      .select('vote')
-      .eq('review_id', reviewId);
-    
-    if (votesError) {
-      console.error('Error fetching votes:', votesError);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'database_error',
-          message: 'Error fetching votes',
-        },
-      });
-    }
-    
-    const upvotes = votesData.filter(v => v.vote === 1).length;
-    const downvotes = votesData.filter(v => v.vote === -1).length;
-    
-    return res.status(200).json({
-      success: true,
-      reviewId,
-      helpful: {
-        upvotes,
-        downvotes,
-        userVote: vote,
-      },
-    });
-  } catch (error) {
-    console.error('Error in voteReview:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'server_error',
-        message: 'An unexpected error occurred',
-      },
-    });
-  }
-};
-
-/**
- * Delete a review
- */
-export const deleteReview = async (req: Request, res: Response) => {
-  try {
-    const { reviewId } = req.params;
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'unauthorized',
-          message: 'You must be logged in to delete a review',
-        },
-      });
-    }
-    
-    // Check if review exists and user is the author
-    const { data: reviewData, error: reviewError } = await supabase
-      .from('reviews')
-      .select('id, user_id')
-      .eq('id', reviewId)
-      .single();
-    
-    if (reviewError || !reviewData) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'not_found',
-          message: 'Review not found',
-        },
-      });
-    }
-    
-    if (reviewData.user_id !== userId) {
-      // In a real app, you'd also check if the user is an admin
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'forbidden',
-          message: 'You are not authorized to delete this review',
-        },
-      });
-    }
-    
-    // Delete the review (cascading delete will handle related records)
-    const { error: deleteError } = await supabase
-      .from('reviews')
-      .delete()
-      .eq('id', reviewId);
-    
-    if (deleteError) {
-      console.error('Error deleting review:', deleteError);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'database_error',
-          message: 'Error deleting review',
-        },
-      });
-    }
-    
-    return res.status(200).json({
-      success: true,
-      message: 'Review successfully deleted',
-    });
-  } catch (error) {
-    console.error('Error in deleteReview:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'server_error',
-        message: 'An unexpected error occurred',
-      },
-    });
-  }
-};
-
-/**
- * Delete a reply
- */
-export const deleteReply = async (req: Request, res: Response) => {
-  try {
-    const { replyId } = req.params;
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: 'unauthorized',
-          message: 'You must be logged in to delete a reply',
-        },
-      });
-    }
-    
-    // Check if reply exists and user is the author
-    const { data: replyData, error: replyError } = await supabase
-      .from('review_replies')
-      .select('id, user_id')
-      .eq('id', replyId)
-      .single();
-    
-    if (replyError || !replyData) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'not_found',
-          message: 'Reply not found',
-        },
-      });
-    }
-    
-    if (replyData.user_id !== userId) {
-      // In a real app, you'd also check if the user is an admin
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'forbidden',
-          message: 'You are not authorized to delete this reply',
-        },
-      });
-    }
-    
-    // Delete the reply
-    const { error: deleteError } = await supabase
-      .from('review_replies')
-      .delete()
-      .eq('id', replyId);
-    
-    if (deleteError) {
-      console.error('Error deleting reply:', deleteError);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'database_error',
-          message: 'Error deleting reply',
-        },
-      });
-    }
-    
-    return res.status(200).json({
-      success: true,
-      message: 'Reply successfully deleted',
-    });
-  } catch (error) {
-    console.error('Error in deleteReply:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'server_error',
-        message: 'An unexpected error occurred',
-      },
-    });
-  }
-};
-
-/**
  * Edit a review
  */
 export const editReview = async (req: Request, res: Response) => {
@@ -761,7 +403,6 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Validate input
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({
         success: false,
@@ -792,7 +433,6 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Check if review exists and user is the author
     const { data: reviewData, error: reviewError } = await supabase
       .from('reviews')
       .select('id, user_id, created_at')
@@ -819,7 +459,6 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Check if review is within 48 hours
     const reviewDate = new Date(reviewData.created_at);
     const now = new Date();
     const hoursDiff = (now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60);
@@ -834,7 +473,6 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Update the review
     const { data: updatedReview, error: updateError } = await supabase
       .from('reviews')
       .update({
@@ -856,9 +494,7 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Handle images if provided
     if (images) {
-      // Delete existing images
       const { error: deleteImagesError } = await supabase
         .from('review_images')
         .delete()
@@ -868,17 +504,14 @@ export const editReview = async (req: Request, res: Response) => {
         console.error('Error deleting existing images:', deleteImagesError);
       }
       
-      // Upload new images
       const uploadedImages = [];
       for (const imageData of images) {
-        // For simplicity, assuming imageData is already a URL
         const { data: imageRecord, error: imageError } = await supabase
           .from('review_images')
           .insert({
             review_id: reviewId,
             url: imageData,
-            thumbnail_url: imageData, // In real app, generate thumbnail
-            alt_text: 'Review image',
+            thumbnail_url: imageData,
           })
           .select()
           .single();
@@ -892,18 +525,17 @@ export const editReview = async (req: Request, res: Response) => {
           id: imageRecord.id,
           url: imageRecord.url,
           thumbnailUrl: imageRecord.thumbnail_url,
-          alt: imageRecord.alt_text,
+          alt: '', // Use empty string as default
         });
       }
     }
     
-    // Fetch complete review data for response
     const { data: completeReview, error: fetchError } = await supabase
       .from('reviews')
       .select(`
         id, rating, content, created_at, updated_at,
         users:user_id (id, name, avatar_url),
-        images:review_images (id, url, thumbnail_url, alt_text),
+        images:review_images (id, url, thumbnail_url),
         replies:review_replies (
           id, content, created_at,
           users:user_id (id, name, avatar_url)
@@ -924,7 +556,6 @@ export const editReview = async (req: Request, res: Response) => {
       });
     }
     
-    // Format response
     const upvotes = completeReview.votes?.filter(v => v.vote === 1).length || 0;
     const downvotes = completeReview.votes?.filter(v => v.vote === -1).length || 0;
     const userVote = completeReview.votes?.find(v => v.user_id === userId)?.vote || 0;
@@ -950,7 +581,7 @@ export const editReview = async (req: Request, res: Response) => {
           avatar: reply.users.avatar_url,
           isVerified: true,
           isCurrentUser: reply.users.id === userId,
-          isOfficial: false, // Set based on your business logic
+          isOfficial: false,
         },
         date: reply.created_at,
         formattedDate: format(new Date(reply.created_at), 'MMM d, yyyy'),
@@ -966,7 +597,7 @@ export const editReview = async (req: Request, res: Response) => {
         id: image.id,
         url: image.url,
         thumbnailUrl: image.thumbnail_url,
-        alt: image.alt_text,
+        alt: '', // Use empty string as default
       })),
     };
     
@@ -997,7 +628,6 @@ async function getCredibilityBadge(avgRating: number): Promise<string> {
     
     if (error) {
       console.error('Error getting credibility badge:', error);
-      // Fallback if RPC fails
       if (avgRating >= 4.5) return 'outstanding';
       if (avgRating >= 4.0) return 'excellent';
       if (avgRating >= 3.5) return 'good';
@@ -1009,7 +639,6 @@ async function getCredibilityBadge(avgRating: number): Promise<string> {
     return data;
   } catch (error) {
     console.error('Error in getCredibilityBadge:', error);
-    // Fallback
     if (avgRating >= 4.5) return 'outstanding';
     if (avgRating >= 4.0) return 'excellent';
     if (avgRating >= 3.5) return 'good';

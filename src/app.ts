@@ -28,10 +28,26 @@ app.use(limiter);
 const swaggerSpec = setupSwagger();
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
 // API routes
-app.use(routes);
+app.use('/', routes);
 
 // Error handling
 app.use(errorHandler);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    success: false, 
+    error: { 
+      code: 'not_found',
+      message: `Cannot ${req.method} ${req.path}`
+    }
+  });
+});
 
 export default app;

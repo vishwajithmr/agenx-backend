@@ -40,7 +40,7 @@ const router = express.Router();
  *       400:
  *         description: Invalid input or user already exists
  */
-router.post('/auth/register', registerUser);
+router.post('/register', registerUser);
 
 /**
  * @swagger
@@ -68,7 +68,7 @@ router.post('/auth/register', registerUser);
  *       401:
  *         description: Invalid credentials
  */
-router.post('/auth/login', loginUser);
+router.post('/login', loginUser);
 
 /**
  * @swagger
@@ -83,7 +83,7 @@ router.post('/auth/login', loginUser);
  *       401:
  *         description: Not authenticated
  */
-router.post('/auth/logout', authenticateUser, logoutUser);
+router.post('/logout', authenticateUser, logoutUser);
 
 /**
  * @swagger
@@ -107,7 +107,7 @@ router.post('/auth/logout', authenticateUser, logoutUser);
  *       401:
  *         description: Invalid or expired refresh token
  */
-router.post('/auth/refresh', refreshToken);
+router.post('/refresh', refreshToken);
 
 /**
  * @swagger
@@ -122,6 +122,6 @@ router.post('/auth/refresh', refreshToken);
  *       401:
  *         description: Not authenticated
  */
-router.get('/auth/me', authenticateUser, getCurrentUser);
+router.get('/me', authenticateUser, getCurrentUser);
 
 export default router;

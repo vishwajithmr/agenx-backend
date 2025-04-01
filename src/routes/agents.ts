@@ -35,7 +35,7 @@ const router = express.Router();
  *       200:
  *         description: A list of agents
  */
-router.get('/agents', getAllAgents);
+router.get('/', getAllAgents);
 
 /**
  * @swagger
@@ -46,7 +46,7 @@ router.get('/agents', getAllAgents);
  *       200:
  *         description: A list of featured agents
  */
-router.get('/agents/featured', getFeaturedAgents);
+router.get('/featured', getFeaturedAgents);
 
 /**
  * @swagger
@@ -57,7 +57,7 @@ router.get('/agents/featured', getFeaturedAgents);
  *       200:
  *         description: A list of trending agents
  */
-router.get('/agents/trending', getTrendingAgents);
+router.get('/trending', getTrendingAgents);
 
 /**
  * @swagger
@@ -84,7 +84,7 @@ router.get('/agents/trending', getTrendingAgents);
  *       200:
  *         description: Search results
  */
-router.get('/agents/search', searchAgents);
+router.get('/search', searchAgents);
 
 /**
  * @swagger
@@ -104,7 +104,7 @@ router.get('/agents/search', searchAgents);
  *       404:
  *         description: Agent not found
  */
-router.get('/agents/:id', getAgentById);
+router.get('/:id', getAgentById);
 
 /**
  * @swagger
@@ -144,7 +144,7 @@ router.get('/agents/:id', getAgentById);
  *       401:
  *         description: Unauthorized
  */
-router.post('/agents', authenticateUser, createAgent);
+router.post('/', authenticateUser, createAgent);
 
 /**
  * @swagger
@@ -191,7 +191,7 @@ router.post('/agents', authenticateUser, createAgent);
  *       404:
  *         description: Agent not found
  */
-router.put('/agents/:id', authenticateUser, updateAgent);
+router.put('/:id', authenticateUser, updateAgent);
 
 /**
  * @swagger
@@ -215,7 +215,7 @@ router.put('/agents/:id', authenticateUser, updateAgent);
  *       404:
  *         description: Agent not found
  */
-router.delete('/agents/:id', authenticateUser, deleteAgent);
+router.delete('/:id', authenticateUser, deleteAgent);
 
 /**
  * @swagger
@@ -239,7 +239,7 @@ router.delete('/agents/:id', authenticateUser, deleteAgent);
  *       404:
  *         description: Agent not found
  */
-router.post('/agents/:id/like', authenticateUser, likeAgent);
+router.post('/:id/like', authenticateUser, likeAgent);
 
 /**
  * @swagger
@@ -259,6 +259,6 @@ router.post('/agents/:id/like', authenticateUser, likeAgent);
  *       404:
  *         description: Agent not found
  */
-router.post('/agents/:id/view', viewAgent);
+router.post('/:id/view', viewAgent);
 
 export default router;
