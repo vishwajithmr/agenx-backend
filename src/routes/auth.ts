@@ -1,15 +1,20 @@
 import express from 'express';
-import { signup, login, logout, getUser } from '../controllers/authController';
-import { authenticate } from '../middleware/auth';
+import { 
+  loginUser, 
+  registerUser, 
+  logoutUser, 
+  refreshToken,
+  getCurrentUser
+} from '../controllers/authController';
+import { authenticateUser } from '../middleware/auth';
 
 const router = express.Router();
 
 /**
  * @swagger
- * /auth/signup:
+ * /auth/register:
  *   post:
  *     summary: Register a new user
- *     tags: [Auth]
  *     requestBody:
  *       required: true
  *       content:
@@ -19,29 +24,29 @@ const router = express.Router();
  *             required:
  *               - email
  *               - password
+ *               - name
  *             properties:
  *               email:
  *                 type: string
  *                 format: email
  *               password:
  *                 type: string
- *                 format: password
- *               username:
+ *                 minLength: 8
+ *               name:
  *                 type: string
  *     responses:
  *       201:
- *         description: User created successfully
+ *         description: User registered successfully
  *       400:
- *         description: Invalid inputs
+ *         description: Invalid input or user already exists
  */
-router.post('/signup', signup);
+router.post('/auth/register', registerUser);
 
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Login a user
- *     tags: [Auth]
+ *     summary: Log in a user
  *     requestBody:
  *       required: true
  *       content:
@@ -57,43 +62,66 @@ router.post('/signup', signup);
  *                 format: email
  *               password:
  *                 type: string
- *                 format: password
  *     responses:
  *       200:
  *         description: Login successful
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', login);
+router.post('/auth/login', loginUser);
 
 /**
  * @swagger
  * /auth/logout:
  *   post:
- *     summary: Logout current user
- *     tags: [Auth]
+ *     summary: Log out current user
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Logout successful
+ *       401:
+ *         description: Not authenticated
  */
-router.post('/logout', logout);
+router.post('/auth/logout', authenticateUser, logoutUser);
 
 /**
  * @swagger
- * /auth/user:
+ * /auth/refresh:
+ *   post:
+ *     summary: Refresh access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: New tokens issued
+ *       401:
+ *         description: Invalid or expired refresh token
+ */
+router.post('/auth/refresh', refreshToken);
+
+/**
+ * @swagger
+ * /auth/me:
  *   get:
- *     summary: Get current user details
- *     tags: [Auth]
+ *     summary: Get current user's profile
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: User details retrieved
+ *         description: User profile
  *       401:
  *         description: Not authenticated
  */
-router.get('/user', authenticate, getUser);
+router.get('/auth/me', authenticateUser, getCurrentUser);
 
 export default router;

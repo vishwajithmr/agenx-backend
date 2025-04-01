@@ -1,93 +1,255 @@
-import { Request, Response, NextFunction } from 'express';
-import supabase from '../config/supabase';
-import { AuthenticatedRequest, AuthResponse } from '../types';
+import { Request, Response } from 'express';
+import { supabase } from '../config/supabase';
 
 /**
  * Register a new user
  */
-export const signup = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
+export const registerUser = async (req: Request, res: Response) => {
   try {
-    const { email, password, username } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const { email, password, name } = req.body;
+
+    // Validate input
+    if (!email || !password || !name) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'missing_fields',
+          message: 'Email, password, and name are required'
+        }
+      });
     }
-    
-    const { data, error } = await supabase.auth.signUp({
+
+    // Register user with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { username }
-      }
     });
-    
-    if (error) {
-      return res.status(400).json({ error: error.message });
+
+    if (authError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'registration_failed',
+          message: authError.message
+        }
+      });
     }
-    
+
+    // Create user profile in users table
+    if (authData.user) {
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: email,
+          name: name,
+        });
+
+      if (profileError) {
+        console.error('Error creating user profile:', profileError);
+        // Don't return error to client as auth was successful
+      }
+    }
+
     return res.status(201).json({
-      message: 'User created successfully',
-      user: data.user,
+      success: true,
+      message: 'Registration successful. Please check your email to confirm your account.'
     });
   } catch (error) {
-    next(error);
+    console.error('Registration error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
   }
 };
 
 /**
- * Login a user
+ * Login user
  */
-export const login = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
+export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    
+
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'missing_fields',
+          message: 'Email and password are required'
+        }
+      });
     }
-    
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    
+
     if (error) {
-      return res.status(401).json({ error: error.message });
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'invalid_credentials',
+          message: 'Invalid email or password'
+        }
+      });
     }
-    
+
     return res.status(200).json({
-      message: 'Login successful',
-      session: data.session,
+      success: true,
       user: data.user,
+      session: data.session
     });
   } catch (error) {
-    next(error);
+    console.error('Login error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
   }
 };
 
 /**
- * Logout the current user
+ * Logout user
  */
-export const logout = async (req: Request, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
+export const logoutUser = async (req: Request, res: Response) => {
   try {
     const { error } = await supabase.auth.signOut();
-    
+
     if (error) {
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'logout_failed',
+          message: error.message
+        }
+      });
     }
-    
-    return res.status(200).json({ message: 'Logout successful' });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
   } catch (error) {
-    next(error);
+    console.error('Logout error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
   }
 };
 
 /**
- * Get current user
+ * Refresh access token
  */
-export const getUser = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<Response<AuthResponse> | void> => {
+export const refreshToken = async (req: Request, res: Response) => {
   try {
-    return res.status(200).json({ message: 'User retrieved successfully', user: req.user });
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'missing_refresh_token',
+          message: 'Refresh token is required'
+        }
+      });
+    }
+
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'invalid_refresh_token',
+          message: 'Invalid or expired refresh token'
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      session: data.session
+    });
   } catch (error) {
-    next(error);
+    console.error('Token refresh error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
+  }
+};
+
+/**
+ * Get current user profile
+ */
+export const getCurrentUser = async (req: Request, res: Response) => {
+  try {
+    // User is already authenticated via middleware
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'unauthorized',
+          message: 'Not authenticated'
+        }
+      });
+    }
+
+    // Get user profile from database
+    const { data: profile, error: profileError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'profile_error',
+          message: 'Error retrieving user profile'
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        avatar: profile.avatar_url,
+        createdAt: profile.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
   }
 };

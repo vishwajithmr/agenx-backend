@@ -1,8 +1,13 @@
+import dotenv from 'dotenv';
 import app from './app';
 
-const PORT: number = parseInt(process.env.PORT as string, 10) || 3000;
+// Load environment variables
+dotenv.config();
 
-app.listen(PORT, (): void => {
+const PORT = process.env.PORT || 9000;
+
+// Start the server
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
+  console.log(`API Documentation available at http://localhost:${PORT}/api-docs`);
 });

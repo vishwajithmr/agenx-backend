@@ -83,3 +83,166 @@ declare global {
     }
   }
 }
+
+// User types
+export interface User {
+  id: string;
+  email: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Agent types
+export interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  owner_id: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Review types
+export interface Review {
+  id: string;
+  agent_id: string;
+  user_id: string;
+  rating: number;
+  content: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ReviewImage {
+  id: string;
+  review_id: string;
+  url: string;
+  thumbnail_url: string;
+  alt_text?: string;
+  created_at: Date;
+}
+
+export interface ReviewReply {
+  id: string;
+  review_id: string;
+  user_id: string;
+  content: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ReviewVote {
+  id: string;
+  review_id: string;
+  user_id: string;
+  vote: number; // 1 for upvote, -1 for downvote, 0 for removing vote
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Response types
+export interface ReviewAuthor {
+  id: string;
+  name: string;
+  avatar?: string;
+  isVerified: boolean;
+  isCurrentUser: boolean;
+  isOfficial?: boolean;
+}
+
+export interface ReviewImageResponse {
+  id: string;
+  url: string;
+  thumbnailUrl: string;
+  alt?: string;
+}
+
+export interface ReviewReplyResponse {
+  id: string;
+  author: ReviewAuthor;
+  date: string;
+  formattedDate: string;
+  content: string;
+}
+
+export interface ReviewHelpful {
+  upvotes: number;
+  downvotes: number;
+  userVote: number; // 1, -1, or 0
+}
+
+export interface ReviewResponse {
+  id: string;
+  author: ReviewAuthor;
+  rating: number;
+  date: string;
+  formattedDate: string;
+  content: string;
+  replies: ReviewReplyResponse[];
+  replyCount: number;
+  helpful: ReviewHelpful;
+  additionalImages: ReviewImageResponse[];
+}
+
+export interface ReviewSummary {
+  averageRating: number;
+  totalReviews: number;
+  credibilityScore: number;
+  credibilityBadge: string;
+  recentPositivePercentage: number;
+  ratingDistribution: {
+    '1': number;
+    '2': number;
+    '3': number;
+    '4': number;
+    '5': number;
+  };
+}
+
+export interface PaginationResponse {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+// Request types
+export interface CreateReviewRequest {
+  rating: number;
+  content: string;
+  images?: string[]; // Base64 encoded images or image URLs
+}
+
+export interface UpdateReviewRequest {
+  rating: number;
+  content: string;
+  images?: string[]; // Base64 encoded images or image URLs
+}
+
+export interface CreateReplyRequest {
+  content: string;
+}
+
+export interface VoteRequest {
+  vote: number; // 1 for upvote, -1 for downvote, 0 for removing vote
+}
+
+export interface ReviewQueryParams {
+  page?: number;
+  limit?: number;
+  sort?: 'newest' | 'oldest' | 'highest' | 'lowest' | 'most_helpful';
+  rating?: number;
+}
+
+// Error types
+export interface ApiError {
+  code: string;
+  message: string;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: ApiError;
+}
