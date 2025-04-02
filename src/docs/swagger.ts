@@ -174,7 +174,7 @@ const options = {
       }
     }
   },
-  apis: ['./src/routes/*.ts'],
+  apis: ['./src/api/features/**/*.ts'],
 };
 
 export const setupSwagger = () => {

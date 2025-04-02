@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/supabase';
-import { AuthenticatedRequest } from '../types';
+import { supabase } from '../../db/config/supabase';
+import { AuthenticatedRequest } from '../../shared/types';
 
 export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
   // Get the token from the Authorization header

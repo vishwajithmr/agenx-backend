@@ -3,8 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
-import { setupSwagger } from './docs/swagger';
-import routes from './routes';
+import { setupSwagger } from '../docs/swagger';
+import apiRoutes from '../api';
 import errorHandler from './middleware/errorHandler';
 
 const app = express();
@@ -34,7 +34,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/', routes);
+app.use('/', apiRoutes);
 
 // Error handling
 app.use(errorHandler);

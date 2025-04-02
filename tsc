@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Create the main directory structure
+mkdir -p src/api/features/auth
+mkdir -p src/api/features/agents
+mkdir -p src/api/features/reviews
+mkdir -p src/core/config
+mkdir -p src/core/middleware
+mkdir -p src/db/migrations
+mkdir -p src/db/models
+mkdir -p src/db/config
+mkdir -p src/shared/types
+mkdir -p src/shared/utils
+mkdir -p src/docs
+
+# Create README files
+echo "# API Module\n\nContains all API endpoints organized by features." > src/api/README.md
+echo "# Features\n\nFeature modules for the API." > src/api/features/README.md
+echo "# Authentication Feature\n\nHandles user authentication and authorization." > src/api/features/auth/README.md
+echo "# Agents Feature\n\nManages AI agents in the marketplace." > src/api/features/agents/README.md
+echo "# Reviews Feature\n\nHandles user reviews for agents." > src/api/features/reviews/README.md
+echo "# Core Module\n\nCore application setup and configuration." > src/core/README.md
+echo "# Database Module\n\nDatabase access and management." > src/db/README.md
+echo "# Shared Resources\n\nShared utilities and types used across the application." > src/shared/README.md
+echo "# API Documentation\n\nAPI documentation using Swagger/OpenAPI." > src/docs/README.md
+
+echo "Directory structure created successfully!"
+
+# Make the script executable
+chmod +x tsc

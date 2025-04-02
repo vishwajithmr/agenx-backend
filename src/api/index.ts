@@ -1,7 +1,7 @@
 import express from 'express';
-import authRoutes from './auth';
-import agentRoutes from './agents';
-import reviewRoutes from './reviews';
+import authRoutes from './features/auth/routes';
+import agentRoutes from './features/agents/routes';
+import reviewRoutes from './features/reviews/routes';
 
 const router = express.Router();
 

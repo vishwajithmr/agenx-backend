@@ -5,8 +5,8 @@ import {
   logoutUser, 
   refreshToken,
   getCurrentUser
-} from '../controllers/authController';
-import { authenticateUser } from '../middleware/auth';
+} from './controllers';
+import { authenticateUser } from '../../../core/middleware/auth';
 
 const router = express.Router();
 

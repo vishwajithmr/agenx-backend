@@ -120,10 +120,12 @@ CREATE POLICY read_reviews ON reviews FOR SELECT USING (TRUE);
 CREATE POLICY read_review_replies ON review_replies FOR SELECT USING (TRUE);
 CREATE POLICY read_review_images ON review_images FOR SELECT USING (TRUE);
 
--- Only the user can create their own review
-CREATE POLICY create_review ON reviews FOR INSERT WITH CHECK (
-  auth.uid() = user_id
-);
+-- Drop the existing create_review policy if it exists
+DROP POLICY IF EXISTS create_review ON reviews;
+
+-- Create the create_review policy to allow authenticated users to insert reviews
+CREATE POLICY create_review ON reviews FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
 
 -- Only the user can update their own review
 CREATE POLICY update_review ON reviews FOR UPDATE USING (

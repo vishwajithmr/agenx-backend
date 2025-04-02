@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabase } from '../config/supabase';
+import { supabase } from '../../../db/config/supabase';
 
 /**
  * Register a new user
