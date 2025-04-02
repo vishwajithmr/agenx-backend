@@ -8,12 +8,38 @@ const options = {
       title: 'AI Agent Marketplace API',
       version: '1.0.0',
       description: 'API documentation for the AI agent marketplace',
+      contact: {
+        name: 'API Support',
+        email: 'support@agenx.com'
+      }
     },
     servers: [
       {
         url: 'http://localhost:9000',
         description: 'Development server',
       },
+      {
+        url: 'https://api.agenx.com',
+        description: 'Production server',
+      }
+    ],
+    tags: [
+      {
+        name: 'Auth',
+        description: 'Authentication and user management endpoints'
+      },
+      {
+        name: 'Agents',
+        description: 'Endpoints for managing AI agents'
+      },
+      {
+        name: 'Reviews',
+        description: 'Endpoints for managing agent reviews'
+      },
+      {
+        name: 'Companies',
+        description: 'Endpoints for managing companies'
+      }
     ],
     components: {
       securitySchemes: {
@@ -24,6 +50,114 @@ const options = {
         },
       },
       schemas: {
+        // User schemas
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            name: { type: 'string' },
+            avatar: { type: 'string', nullable: true },
+            isVerified: { type: 'boolean' },
+            isOfficial: { type: 'boolean' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        
+        LoginRequest: {
+          type: 'object',
+          required: ['email', 'password'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', format: 'password' }
+          }
+        },
+        
+        RegisterRequest: {
+          type: 'object',
+          required: ['email', 'password', 'name'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', format: 'password', minLength: 8 },
+            name: { type: 'string' }
+          }
+        },
+        
+        RefreshTokenRequest: {
+          type: 'object',
+          required: ['refreshToken'],
+          properties: {
+            refreshToken: { type: 'string' }
+          }
+        },
+        
+        // Agent schemas
+        Agent: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            description: { type: 'string', nullable: true },
+            imageUrl: { type: 'string', nullable: true },
+            isPro: { type: 'boolean' },
+            likes: { type: 'integer' },
+            views: { type: 'integer' },
+            rating: { type: 'number', format: 'float' },
+            usageCount: { type: 'integer' },
+            capabilities: { 
+              type: 'array', 
+              items: { type: 'string' } 
+            },
+            company: { 
+              type: 'object', 
+              nullable: true,
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                name: { type: 'string' },
+                logoUrl: { type: 'string', nullable: true },
+                isVerified: { type: 'boolean' },
+                isEnterprise: { type: 'boolean' }
+              }
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            isOwner: { type: 'boolean' }
+          }
+        },
+        
+        CreateAgentRequest: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            imageUrl: { type: 'string' },
+            isPro: { type: 'boolean' },
+            capabilities: { 
+              type: 'array', 
+              items: { type: 'string' } 
+            },
+            companyId: { type: 'string', format: 'uuid' },
+            isPublic: { type: 'boolean', default: true }
+          }
+        },
+        
+        UpdateAgentRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            description: { type: 'string' },
+            imageUrl: { type: 'string' },
+            isPro: { type: 'boolean' },
+            capabilities: { 
+              type: 'array', 
+              items: { type: 'string' } 
+            },
+            companyId: { type: 'string', format: 'uuid' },
+            isPublic: { type: 'boolean' }
+          }
+        },
+        
+        // Review schemas
         CreateReviewRequest: {
           type: 'object',
           required: ['rating', 'content'],
@@ -52,6 +186,7 @@ const options = {
             }
           }
         },
+        
         UpdateReviewRequest: {
           type: 'object',
           required: ['rating', 'content'],
@@ -80,6 +215,7 @@ const options = {
             }
           }
         },
+        
         CreateReplyRequest: {
           type: 'object',
           required: ['content'],
@@ -92,6 +228,7 @@ const options = {
             }
           }
         },
+        
         VoteRequest: {
           type: 'object',
           required: ['vote'],
@@ -103,14 +240,15 @@ const options = {
             }
           }
         },
+        
         ReviewResponse: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
             author: { 
               type: 'object',
               properties: {
-                id: { type: 'string' },
+                id: { type: 'string', format: 'uuid' },
                 name: { type: 'string' },
                 avatar: { type: 'string', nullable: true },
                 isVerified: { type: 'boolean' },
@@ -141,34 +279,81 @@ const options = {
             }
           }
         },
+        
         ReviewReplyResponse: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
             author: { $ref: '#/components/schemas/ReviewAuthor' },
             date: { type: 'string', format: 'date-time' },
             formattedDate: { type: 'string' },
             content: { type: 'string' }
           }
         },
+        
         ReviewImageResponse: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
             url: { type: 'string' },
             thumbnailUrl: { type: 'string' },
             alt: { type: 'string', nullable: true }
           }
         },
+        
         ReviewAuthor: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
             name: { type: 'string' },
             avatar: { type: 'string', nullable: true },
             isVerified: { type: 'boolean' },
             isCurrentUser: { type: 'boolean' },
             isOfficial: { type: 'boolean', nullable: true }
+          }
+        },
+        
+        ReviewSummary: {
+          type: 'object',
+          properties: {
+            averageRating: { type: 'number', format: 'float' },
+            totalReviews: { type: 'integer' },
+            credibilityScore: { type: 'number', format: 'float' },
+            credibilityBadge: { type: 'string', enum: ['excellent', 'good', 'average', 'poor', 'not-rated'] },
+            recentPositivePercentage: { type: 'integer' },
+            ratingDistribution: {
+              type: 'object',
+              properties: {
+                '1': { type: 'integer' },
+                '2': { type: 'integer' },
+                '3': { type: 'integer' },
+                '4': { type: 'integer' },
+                '5': { type: 'integer' }
+              }
+            }
+          }
+        },
+        
+        // Response wrappers
+        ApiResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            message: { type: 'string' }
+          }
+        },
+        
+        ErrorResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', default: false },
+            error: {
+              type: 'object',
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' }
+              }
+            }
           }
         }
       }
