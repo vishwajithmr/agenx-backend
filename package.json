@@ -8,7 +8,11 @@
     "start": "node dist/core/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/core/server.ts",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate": "supabase db push",
+    "migration:new": "supabase migration new",
+    "db:reset": "supabase db reset",
+    "db:link": "supabase link --project-ref akuconoexuqqledismlo"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.31.0",
