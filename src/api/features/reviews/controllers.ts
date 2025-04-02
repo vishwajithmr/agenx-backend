@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { format } from 'date-fns';
 import { supabase } from '../../../db/config/supabase';
-import { ReviewResponse, ReviewSummary } from '../../../shared/types';
+import { ReviewResponse, ReviewSummary, AuthenticatedRequest } from '../../../shared/types';
 
 /**
  * Get review summary for an agent
@@ -83,7 +83,7 @@ export const getReviewSummary = async (req: Request, res: Response) => {
 /**
  * Get reviews for an agent with pagination, sorting and filtering
  */
-export const getReviews = async (req: Request, res: Response) => {
+export const getReviews = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { agentId } = req.params;
     const { page = 1, limit = 10, sort = 'newest', rating } = req.query;
@@ -166,7 +166,7 @@ export const getReviews = async (req: Request, res: Response) => {
 /**
  * Submit a new review
  */
-export const submitReview = async (req: Request, res: Response) => {
+export const submitReview = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { agentId } = req.params;
     const { rating, content, images } = req.body;
@@ -316,7 +316,7 @@ export const submitReview = async (req: Request, res: Response) => {
 /**
  * Edit a review
  */
-export const editReview = async (req: Request, res: Response) => {
+export const editReview = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { reviewId } = req.params;
     const { rating, content, images } = req.body;
@@ -448,7 +448,7 @@ export const editReview = async (req: Request, res: Response) => {
 /**
  * Delete a review
  */
-export const deleteReview = async (req: Request, res: Response) => {
+export const deleteReview = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { reviewId } = req.params;
     const userId = req.user?.id;
