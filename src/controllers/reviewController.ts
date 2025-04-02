@@ -420,7 +420,10 @@ export const editReview = async (req: Request, res: Response) => {
     const { reviewId } = req.params;
     const { rating, content, images } = req.body;
     const userId = req.user?.id;
-    
+
+    console.log(`Edit request for review ${reviewId} by user ${userId}`);
+    console.log(`Request body:`, req.body);
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -430,7 +433,7 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({
         success: false,
@@ -440,7 +443,7 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
     if (!content || content.length < 10 || content.length > 2000) {
       return res.status(400).json({
         success: false,
@@ -450,7 +453,7 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
     if (images && images.length > 5) {
       return res.status(400).json({
         success: false,
@@ -460,14 +463,16 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
+    // Check if the review exists and belongs to the user
     const { data: reviewData, error: reviewError } = await supabase
       .from('reviews')
       .select('id, user_id, created_at')
       .eq('id', reviewId)
       .single();
-    
+
     if (reviewError || !reviewData) {
+      console.error('Error fetching review:', reviewError);
       return res.status(404).json({
         success: false,
         error: {
@@ -476,7 +481,7 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
     if (reviewData.user_id !== userId) {
       return res.status(403).json({
         success: false,
@@ -486,11 +491,11 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
     const reviewDate = new Date(reviewData.created_at);
     const now = new Date();
     const hoursDiff = (now.getTime() - reviewDate.getTime()) / (1000 * 60 * 60);
-    
+
     if (hoursDiff > 48) {
       return res.status(400).json({
         success: false,
@@ -500,17 +505,21 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
+    // Update the review
+    console.log(`Updating review ${reviewId}`);
     const { data: updatedReview, error: updateError } = await supabase
       .from('reviews')
       .update({
         rating,
         content,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', reviewId)
-      .select()
-      .single();
-    
+      .select();
+
+    console.log('Update result:', updatedReview, updateError);
+
     if (updateError) {
       console.error('Error updating review:', updateError);
       return res.status(500).json({
@@ -521,17 +530,30 @@ export const editReview = async (req: Request, res: Response) => {
         },
       });
     }
-    
+
+    if (!updatedReview || updatedReview.length === 0) {
+      console.error('No rows were updated for review:', reviewId);
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'not_found',
+          message: 'Review not found or no changes detected',
+        },
+      });
+    }
+
+    // Handle images if provided
     if (images) {
+      console.log(`Updating images for review ${reviewId}`);
       const { error: deleteImagesError } = await supabase
         .from('review_images')
         .delete()
         .eq('review_id', reviewId);
-      
+
       if (deleteImagesError) {
         console.error('Error deleting existing images:', deleteImagesError);
       }
-      
+
       const uploadedImages = [];
       for (const imageData of images) {
         const { data: imageRecord, error: imageError } = await supabase
@@ -543,12 +565,12 @@ export const editReview = async (req: Request, res: Response) => {
           })
           .select()
           .single();
-        
+
         if (imageError) {
           console.error('Error uploading image:', imageError);
           continue;
         }
-        
+
         uploadedImages.push({
           id: imageRecord.id,
           url: imageRecord.url,
@@ -557,81 +579,10 @@ export const editReview = async (req: Request, res: Response) => {
         });
       }
     }
-    
-    const { data: completeReview, error: fetchError } = await supabase
-      .from('reviews')
-      .select(`
-        id, rating, content, created_at, updated_at,
-        users:user_id (id, name, avatar_url),
-        images:review_images (id, url, thumbnail_url),
-        replies:review_replies (
-          id, content, created_at,
-          users:user_id (id, name, avatar_url)
-        ),
-        votes:review_votes (id, user_id, vote)
-      `)
-      .eq('id', reviewId)
-      .single();
-    
-    if (fetchError) {
-      console.error('Error fetching updated review:', fetchError);
-      return res.status(500).json({
-        success: false,
-        error: {
-          code: 'database_error',
-          message: 'Error fetching updated review',
-        },
-      });
-    }
-    
-    const upvotes = completeReview.votes?.filter(v => v.vote === 1).length || 0;
-    const downvotes = completeReview.votes?.filter(v => v.vote === -1).length || 0;
-    const userVote = completeReview.votes?.find(v => v.user_id === userId)?.vote || 0;
-    
-    const reviewResponse: ReviewResponse = {
-      id: completeReview.id,
-      author: {
-        id: completeReview.users.id,
-        name: completeReview.users.name,
-        avatar: completeReview.users.avatar_url,
-        isVerified: true,
-        isCurrentUser: true,
-      },
-      rating: completeReview.rating,
-      date: completeReview.created_at,
-      formattedDate: format(new Date(completeReview.created_at), 'MMM d, yyyy'),
-      content: completeReview.content,
-      replies: (completeReview.replies || []).map((reply) => ({
-        id: reply.id,
-        author: {
-          id: reply.users.id,
-          name: reply.users.name,
-          avatar: reply.users.avatar_url,
-          isVerified: true,
-          isCurrentUser: reply.users.id === userId,
-          isOfficial: false,
-        },
-        date: reply.created_at,
-        formattedDate: format(new Date(reply.created_at), 'MMM d, yyyy'),
-        content: reply.content,
-      })),
-      replyCount: completeReview.replies?.length || 0,
-      helpful: {
-        upvotes,
-        downvotes,
-        userVote,
-      },
-      additionalImages: (completeReview.images || []).map((image) => ({
-        id: image.id,
-        url: image.url,
-        thumbnailUrl: image.thumbnail_url,
-        alt: '', // Use empty string as default
-      })),
-    };
-    
+
     return res.status(200).json({
       success: true,
-      review: reviewResponse,
+      message: 'Review updated successfully',
     });
   } catch (error) {
     console.error('Error in editReview:', error);
