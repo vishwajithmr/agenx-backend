@@ -11,7 +11,13 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// Configure CORS to allow requests with credentials
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://yourproductionsite.com'], // Add your frontend origins
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json({ limit: '10mb' })); // Increased limit for base64 images
 app.use(express.urlencoded({ extended: true }));
 
