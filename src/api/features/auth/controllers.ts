@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../../db/config/supabase';
+import { AuthenticatedRequest } from '../../../core/types';
 
 /**
  * Register a new user
@@ -199,7 +200,7 @@ export const refreshToken = async (req: Request, res: Response) => {
 /**
  * Get current user profile
  */
-export const getCurrentUser = async (req: Request, res: Response) => {
+export const getCurrentUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     // User is already authenticated via middleware
     const userId = req.user?.id;

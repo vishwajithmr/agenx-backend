@@ -1,8 +1,8 @@
 import { Request } from 'express';
-import { SupabaseClient, User } from '@supabase/supabase-js';
+import { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 
 export interface AuthenticatedRequest extends Request {
-  user?: User;
+  user?: SupabaseUser;
   [key: string]: any;
 }
 
@@ -31,6 +31,8 @@ export interface Agent {
   creator_id?: string;
   company_id?: string;
   is_public?: boolean;
+  owner_id?: string;
+  updated_at?: Date;
 }
 
 export interface DbAgent {
@@ -85,22 +87,14 @@ declare global {
   }
 }
 
-// User types
+// User types - consolidated definition
 export interface User {
   id: string;
   email: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-// Agent types
-export interface Agent {
-  id: string;
-  name: string;
-  description: string;
-  owner_id: string;
-  created_at: Date;
-  updated_at: Date;
+  name?: string;
+  avatar?: string;
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 // Review types
