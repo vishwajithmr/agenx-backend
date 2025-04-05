@@ -85,6 +85,7 @@ export interface Agent {
   } | null;
   createdAt: string;
   isOwner: boolean;
+  isLiked?: boolean;
   creator_id?: string;
   company_id?: string;
   is_public: boolean;

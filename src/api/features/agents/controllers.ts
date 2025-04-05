@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { supabase } from '../../../db/config/supabase';
-import { Agent } from '../../../shared/types';
+import { Agent, AuthenticatedRequest } from '../../../shared/types';
 
 /**
  * Get all public agents with pagination
@@ -61,8 +61,106 @@ export const getAllAgents = async (req: Request, res: Response) => {
 /**
  * Get agent by ID
  */
-export const getAgentById = async (req: Request, res: Response) => {
-  // ...existing code...
+export const getAgentById = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    // Validate UUID format
+    if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'invalid_id',
+          message: 'Invalid agent ID format'
+        }
+      });
+    }
+
+    // Query the agent with company details
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .select(`
+        *,
+        companies:company_id(*)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching agent:', error);
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'agent_not_found',
+            message: 'Agent not found'
+          }
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'database_error',
+          message: 'Error fetching agent'
+        }
+      });
+    }
+
+    // If agent is not public, check if the user is the owner
+    if (!agent.is_public && agent.creator_id !== userId) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'agent_not_found',
+          message: 'Agent not found or not accessible'
+        }
+      });
+    }
+
+    // Check if the user has liked this agent
+    let isLiked = false;
+    if (userId) {
+      const { data: likeData, error: likeError } = await supabase
+        .from('agent_likes')
+        .select('id')
+        .eq('agent_id', id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!likeError && likeData) {
+        isLiked = true;
+      }
+    }
+
+    // Transform the data to match the expected format
+    const transformedAgent: Agent = transformAgent(agent);
+    
+    // Add ownership status
+    transformedAgent.isOwner = agent.creator_id === userId;
+    
+    // Add liked status
+    transformedAgent.isLiked = isLiked;
+
+    // Increment view count (but don't wait for it to complete)
+    incrementViewCount(id).catch(err => {
+      console.error('Error incrementing view count:', err);
+    });
+
+    return res.status(200).json({
+      success: true,
+      agent: transformedAgent
+    });
+  } catch (error) {
+    console.error('Error in getAgentById:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
+  }
 };
 
 /**
@@ -152,8 +250,22 @@ function transformAgent(agent: any): Agent {
     } : null,
     createdAt: agent.created_at,
     isOwner: false, // Will be set by the caller if needed
+    isLiked: false, // Will be set by the caller if needed
     creator_id: agent.creator_id,
     company_id: agent.company_id,
     is_public: agent.is_public
   };
+}
+
+/**
+ * Helper function to increment the view count for an agent
+ */
+async function incrementViewCount(agentId: string): Promise<void> {
+  try {
+    // Call the Supabase function to increment views
+    await supabase.rpc('increment_agent_views', { agent_id: agentId });
+  } catch (error) {
+    console.error('Error incrementing view count:', error);
+    throw error;
+  }
 }
