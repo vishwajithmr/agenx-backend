@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
+import yaml from 'js-yaml';
 import { setupSwagger } from '../docs/swagger';
 import apiRoutes from '../api';
 import errorHandler from './middleware/errorHandler';
@@ -33,6 +34,13 @@ app.use(limiter);
 // Swagger documentation
 const swaggerSpec = setupSwagger();
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Add YAML endpoint for swagger spec
+app.get('/swagger.yaml', (req, res) => {
+  const yamlString = yaml.dump(swaggerSpec);
+  res.setHeader('Content-Type', 'text/yaml');
+  res.send(yamlString);
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
