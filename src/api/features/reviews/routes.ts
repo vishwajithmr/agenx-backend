@@ -4,7 +4,13 @@ import {
   getReviews,
   submitReview,
   editReview,
-  deleteReview
+  deleteReview,
+  getReviewReplies,
+  addReviewReply,
+  updateReviewReply,
+  deleteReviewReply,
+  voteOnReview,
+  getReviewVotes
 } from './controllers';
 import { authenticateUser } from '../../../core/middleware/auth';
 
@@ -306,5 +312,377 @@ router.put('/reviews/:reviewId', authenticateUser, editReview);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.delete('/reviews/:reviewId', authenticateUser, deleteReview);
+
+/**
+ * @swagger
+ * /reviews/{reviewId}/replies:
+ *   get:
+ *     tags: [Reviews]
+ *     summary: Get replies for a review
+ *     description: Retrieve a list of replies for a specific review
+ *     parameters:
+ *       - name: reviewId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the review
+ *       - name: page
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - name: limit
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of items per page
+ *     responses:
+ *       200:
+ *         description: List of replies
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 replies:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ReviewReplyResponse'
+ *       404:
+ *         description: Review not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/reviews/:reviewId/replies', getReviewReplies);
+
+/**
+ * @swagger
+ * /reviews/{reviewId}/replies:
+ *   post:
+ *     tags: [Reviews]
+ *     summary: Add a reply to a review
+ *     description: Add a new reply to a specific review
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: reviewId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the review
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateReplyRequest'
+ *     responses:
+ *       201:
+ *         description: Reply created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 reply:
+ *                   $ref: '#/components/schemas/ReviewReplyResponse'
+ *       400:
+ *         description: Invalid input
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Review not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/reviews/:reviewId/replies', authenticateUser, addReviewReply);
+
+/**
+ * @swagger
+ * /reviews/replies/{replyId}:
+ *   put:
+ *     tags: [Reviews]
+ *     summary: Update a reply
+ *     description: Update an existing reply. Replies can only be edited within 24 hours of submission.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: replyId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the reply
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateReplyRequest'
+ *     responses:
+ *       200:
+ *         description: Reply updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 reply:
+ *                   $ref: '#/components/schemas/ReviewReplyResponse'
+ *       400:
+ *         description: Invalid input
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Not owner or edit window expired
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Reply not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.put('/reviews/replies/:replyId', authenticateUser, updateReviewReply);
+
+/**
+ * @swagger
+ * /reviews/replies/{replyId}:
+ *   delete:
+ *     tags: [Reviews]
+ *     summary: Delete a reply
+ *     description: Delete an existing reply. Users can only delete their own replies.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: replyId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the reply
+ *     responses:
+ *       200:
+ *         description: Reply deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Reply deleted successfully
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Not owner
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Reply not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.delete('/reviews/replies/:replyId', authenticateUser, deleteReviewReply);
+
+/**
+ * @swagger
+ * /reviews/{reviewId}/vote:
+ *   post:
+ *     tags: [Reviews]
+ *     summary: Vote on a review
+ *     description: Vote on a review (upvote, downvote, or remove vote)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: reviewId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the review
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VoteRequest'
+ *     responses:
+ *       200:
+ *         description: Vote recorded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 vote:
+ *                   type: object
+ *                   properties:
+ *                     reviewId:
+ *                       type: string
+ *                       format: uuid
+ *                     userVote:
+ *                       type: integer
+ *                       enum: [-1, 0, 1]
+ *                     upvotes:
+ *                       type: integer
+ *                     downvotes:
+ *                       type: integer
+ *       400:
+ *         description: Invalid input
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Review not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.post('/reviews/:reviewId/vote', authenticateUser, voteOnReview);
+
+/**
+ * @swagger
+ * /reviews/{reviewId}/votes:
+ *   get:
+ *     tags: [Reviews]
+ *     summary: Get votes for a review
+ *     description: Retrieve vote statistics for a review and the user's vote if authenticated
+ *     parameters:
+ *       - name: reviewId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the review
+ *     responses:
+ *       200:
+ *         description: Vote statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 votes:
+ *                   type: object
+ *                   properties:
+ *                     upvotes:
+ *                       type: integer
+ *                     downvotes:
+ *                       type: integer
+ *                     userVote:
+ *                       type: integer
+ *                       enum: [-1, 0, 1]
+ *       404:
+ *         description: Review not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/reviews/:reviewId/votes', getReviewVotes);
 
 export default router;
