@@ -1151,8 +1151,9 @@ export const addComment = async (req: AuthenticatedRequest, res: Response) => {
     const { discussionId } = req.params;
     const { content, parentCommentId } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -1161,6 +1162,9 @@ export const addComment = async (req: AuthenticatedRequest, res: Response) => {
         }
       });
     }
+    
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
     
     // Validation checks
     if (!content || content.trim().length < 1 || content.length > 2000) {
@@ -1230,8 +1234,8 @@ export const addComment = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
     
-    // Create the comment
-    const { data: comment, error: createError } = await supabase
+    // Create the comment - USE AUTHENTICATED CLIENT HERE
+    const { data: comment, error: createError } = await authenticatedSupabase
       .from('comments')
       .insert({
         content: content.trim(),
@@ -1690,6 +1694,157 @@ export const deleteComment = async (req: AuthenticatedRequest, res: Response) =>
     });
   } catch (error) {
     console.error('Error deleting comment:', error);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'server_error',
+        message: 'An unexpected error occurred'
+      }
+    });
+  }
+};
+
+/**
+ * Get nested comments for a discussion (recursive)
+ */
+export const getNestedComments = async (req: Request, res: Response) => {
+  try {
+    const { discussionId } = req.params;
+    const userId = req.user?.id;
+    
+    // Check if the discussion exists
+    const { data: discussion, error: discussionError } = await supabase
+      .from('discussions')
+      .select('id, author_id')
+      .eq('id', discussionId)
+      .single();
+      
+    if (discussionError) {
+      if (discussionError.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'not_found',
+            message: 'Discussion not found'
+          }
+        });
+      }
+      console.error('Error checking discussion:', discussionError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'database_error',
+          message: 'Error checking discussion'
+        }
+      });
+    }
+    
+    // Helper function to recursively fetch comments and their replies
+    const fetchCommentsRecursive = async (parentId: string | null): Promise<CommentResponse[]> => {
+      // Build query for comments based on parent
+      let query = supabase
+        .from('comments')
+        .select(`
+          *,
+          users:author_id (
+            id,
+            name,
+            avatar_url,
+            is_verified,
+            is_official
+          )
+        `)
+        .eq('discussion_id', discussionId)
+        .eq('is_deleted', false)
+        .order('score', { ascending: false });
+      
+      if (parentId) {
+        query = query.eq('parent_comment_id', parentId);
+      } else {
+        query = query.is('parent_comment_id', null);
+      }
+      
+      const { data: comments, error: commentsError } = await query;
+      
+      if (commentsError) {
+        console.error('Error fetching comments:', commentsError);
+        return [];
+      }
+      
+      if (!comments || comments.length === 0) {
+        return [];
+      }
+      
+      // Get user votes on comments if authenticated
+      const votesPromises = comments.map(comment => {
+        if (userId) {
+          return supabase
+            .from('votes')
+            .select('value')
+            .eq('target_id', comment.id)
+            .eq('user_id', userId)
+            .eq('target_type', 'comment')
+            .maybeSingle();
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      
+      const votesResults = await Promise.all(votesPromises);
+      
+      // Recursively fetch replies for each comment
+      const repliesPromises = comments.map(comment => fetchCommentsRecursive(comment.id));
+      const repliesResults = await Promise.all(repliesPromises);
+      
+      // Format the comments with their replies
+      return comments.map((comment, index) => {
+        const voteData = votesResults[index].data;
+        
+        return {
+          id: comment.id,
+          author: {
+            id: comment.author_id,
+            name: comment.users?.name || 'User',
+            avatar: comment.users?.avatar_url || null,
+            isVerified: comment.users?.is_verified || false,
+            isCurrentUser: comment.author_id === userId,
+            isOfficial: comment.users?.is_official || false,
+            isOP: comment.author_id === discussion.author_id
+          },
+          content: comment.content,
+          timestamp: new Date(comment.created_at).getTime(),
+          formattedDate: format(new Date(comment.created_at), 'PP'),
+          score: comment.score || 0,
+          userVote: voteData ? voteData.value : 0,
+          replyCount: comment.reply_count || 0,
+          replies: repliesResults[index]
+        };
+      });
+    };
+    
+    // Start fetching from top-level comments
+    const commentsTree = await fetchCommentsRecursive(null);
+    
+    // Count total comments in the discussion for metadata
+    const { count: totalComments, error: countError } = await supabase
+      .from('comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('discussion_id', discussionId)
+      .eq('is_deleted', false);
+      
+    if (countError) {
+      console.error('Error counting comments:', countError);
+    }
+    
+    return res.status(200).json({
+      success: true,
+      comments: commentsTree,
+      metadata: {
+        total: totalComments || 0,
+        discussionId
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching nested comments:', error);
     return res.status(500).json({
       success: false,
       error: {

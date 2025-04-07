@@ -8,6 +8,7 @@ import {
   voteOnDiscussion,
   addComment,
   getComments,
+  getNestedComments,
   voteOnComment,
   updateComment,
   deleteComment
@@ -463,6 +464,59 @@ router.post('/discussions/:discussionId/vote', authenticateUser, voteOnDiscussio
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/discussions/:discussionId/comments', optionalAuthUser, getComments);
+
+/**
+ * @swagger
+ * /api/discussions/{discussionId}/nested-comments:
+ *   get:
+ *     tags: [Discussions]
+ *     summary: Get complete nested comment hierarchy for a discussion
+ *     description: Retrieves the entire tree of comments including all nested replies for a discussion.
+ *     parameters:
+ *       - name: discussionId
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the discussion to get comments for
+ *     responses:
+ *       200:
+ *         description: Complete comment tree
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 comments:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/CommentResponse'
+ *                 metadata:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     discussionId:
+ *                       type: string
+ *                       format: uuid
+ *       404:
+ *         description: Discussion not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/discussions/:discussionId/nested-comments', optionalAuthUser, getNestedComments);
 
 /**
  * @swagger
