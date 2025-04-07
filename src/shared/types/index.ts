@@ -90,3 +90,72 @@ export interface Agent {
   company_id?: string;
   is_public: boolean;
 }
+
+// Discussions
+export interface Author {
+  id: string;
+  name: string;
+  avatar: string | null;
+  isVerified: boolean;
+  isOP?: boolean;
+}
+
+export interface DiscussionResponse {
+  id: string;
+  title: string;
+  content: string;
+  author: Author;
+  score: number;
+  userVote: number;
+  timestamp: number;
+  isPinned: boolean;
+  commentCount: number;
+  agentId: string;
+}
+
+export interface CommentResponse {
+  id: string;
+  author: Author;
+  content: string;
+  timestamp: number;
+  score: number;
+  userVote: number;
+  replyCount: number;
+  replies?: CommentResponse[];
+}
+
+export interface PaginationResponse {
+  total: number;
+  pages: number;
+  current: number;
+  limit: number;
+}
+
+export interface DiscussionDetailResponse extends DiscussionResponse {
+  comments: CommentResponse[];
+  commentPagination: PaginationResponse;
+}
+
+export interface CreateDiscussionRequest {
+  agentId: string;
+  title: string;
+  content: string;
+}
+
+export interface UpdateDiscussionRequest {
+  title: string;
+  content: string;
+}
+
+export interface VoteRequest {
+  vote: -1 | 0 | 1;
+}
+
+export interface CreateCommentRequest {
+  content: string;
+  parentCommentId?: string;
+}
+
+export interface UpdateCommentRequest {
+  content: string;
+}

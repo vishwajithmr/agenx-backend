@@ -1377,6 +1377,167 @@ components:
             '5':
               type: integer
 
+    # Discussion schemas
+    Author:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        isVerified:
+          type: boolean
+        isOP:
+          type: boolean
+          nullable: true
+
+    DiscussionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+        author:
+          $ref: '#/components/schemas/Author'
+        score:
+          type: integer
+        userVote:
+          type: integer
+          enum: [-1, 0, 1]
+        timestamp:
+          type: integer
+        isPinned:
+          type: boolean
+        commentCount:
+          type: integer
+        agentId:
+          type: string
+          format: uuid
+
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/Author'
+        content:
+          type: string
+        timestamp:
+          type: integer
+        score:
+          type: integer
+        userVote:
+          type: integer
+          enum: [-1, 0, 1]
+        replyCount:
+          type: integer
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+
+    PaginationResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        pages:
+          type: integer
+        current:
+          type: integer
+        limit:
+          type: integer
+
+    DiscussionDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/DiscussionResponse'
+        - type: object
+          properties:
+            comments:
+              type: array
+              items:
+                $ref: '#/components/schemas/CommentResponse'
+            commentPagination:
+              $ref: '#/components/schemas/PaginationResponse'
+
+    CreateDiscussionRequest:
+      type: object
+      required:
+        - agentId
+        - title
+        - content
+      properties:
+        agentId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 5
+          maxLength: 100
+        content:
+          type: string
+          minLength: 10
+          maxLength: 5000
+
+    UpdateDiscussionRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          minLength: 5
+          maxLength: 100
+        content:
+          type: string
+          minLength: 10
+          maxLength: 5000
+
+    VoteRequest:
+      type: object
+      required:
+        - vote
+      properties:
+        vote:
+          type: integer
+          enum: [-1, 0, 1]
+          description: -1 for downvote, 0 for no vote, 1 for upvote
+
+    CreateCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        parentCommentId:
+          type: string
+          format: uuid
+          nullable: true
+
+    UpdateCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
     # Response wrappers
     ApiResponse:
       type: object
