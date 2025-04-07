@@ -87,12 +87,23 @@ export const getReviews = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { agentId } = req.params;
     const { page = 1, limit = 10, sort = 'newest', rating } = req.query;
+    const userId = req.user?.id;
 
     const offset = (Number(page) - 1) * Number(limit);
 
+    // Query to get the reviews for the agent
     let query = supabase
       .from('reviews')
-      .select('*')
+      .select(`
+        *,
+        users:user_id (
+          id,
+          name,
+          avatar_url,
+          is_verified,
+          is_official
+        )
+      `)
       .eq('agent_id', agentId)
       .range(offset, offset + Number(limit) - 1);
 
@@ -123,29 +134,100 @@ export const getReviews = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const formattedReviews: ReviewResponse[] = reviews.map((review) => ({
-      id: review.id,
-      author: {
-        id: review.user_id,
-        name: review.user_name,
-        avatar: review.user_avatar,
-        isVerified: review.user_is_verified,
-        isCurrentUser: review.user_id === req.user?.id,
-        isOfficial: review.user_is_official,
-      },
-      rating: review.rating,
-      date: review.created_at,
-      formattedDate: format(new Date(review.created_at), 'PP'),
-      content: review.content,
-      replies: review.replies || [],
-      replyCount: review.reply_count || 0,
-      helpful: {
-        upvotes: review.upvotes || 0,
-        downvotes: review.downvotes || 0,
-        userVote: review.user_vote || 0,
-      },
-      additionalImages: review.additional_images || [],
-    }));
+    // Prepare promises to fetch replies for each review
+    const repliesPromises = reviews.map(review => 
+      supabase
+        .from('review_replies')
+        .select(`
+          id,
+          content,
+          created_at,
+          updated_at,
+          user_id,
+          users:user_id (
+            id,
+            name,
+            avatar_url,
+            is_verified,
+            is_official
+          )
+        `)
+        .eq('review_id', review.id)
+        .order('created_at', { ascending: true })
+    );
+
+    // Prepare promises to fetch vote information for each review if user is authenticated
+    const votesPromises = reviews.map(review => {
+      if (userId) {
+        return supabase
+          .from('review_votes')
+          .select('vote')
+          .eq('review_id', review.id)
+          .eq('user_id', userId)
+          .maybeSingle();
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+
+    // Wait for all replies and votes to be fetched
+    const [repliesResults, votesResults] = await Promise.all([
+      Promise.all(repliesPromises),
+      Promise.all(votesPromises)
+    ]);
+
+    // Format the reviews with their replies and vote information
+    const formattedReviews: ReviewResponse[] = reviews.map((review, index) => {
+      const repliesData = repliesResults[index].data || [];
+      const voteData = votesResults[index].data;
+      
+      // Format replies
+      const formattedReplies = repliesData.map(reply => ({
+        id: reply.id,
+        author: {
+          id: reply.user_id,
+          name: reply.users?.name || 'User',
+          avatar: reply.users?.avatar_url || null,
+          isVerified: reply.users?.is_verified || false,
+          isCurrentUser: reply.user_id === userId,
+          isOfficial: reply.users?.is_official || false
+        },
+        date: reply.created_at,
+        formattedDate: format(new Date(reply.created_at), 'PP'),
+        content: reply.content
+      }));
+
+      // Format images
+      const additionalImages = review.images ? review.images.map((img: any, imgIndex: number) => ({
+        id: `${review.id}-img-${imgIndex}`,
+        url: img.url || img,
+        thumbnailUrl: img.thumbnailUrl || img,
+        alt: img.alt || `Review image ${imgIndex + 1}`
+      })) : [];
+
+      return {
+        id: review.id,
+        author: {
+          id: review.user_id,
+          name: review.users?.name || 'User',
+          avatar: review.users?.avatar_url || null,
+          isVerified: review.users?.is_verified || false,
+          isCurrentUser: review.user_id === userId,
+          isOfficial: review.users?.is_official || false
+        },
+        rating: review.rating,
+        date: review.created_at,
+        formattedDate: format(new Date(review.created_at), 'PP'),
+        content: review.content,
+        replies: formattedReplies,
+        replyCount: formattedReplies.length,
+        helpful: {
+          upvotes: review.upvotes || 0,
+          downvotes: review.downvotes || 0,
+          userVote: voteData ? voteData.vote : 0,
+        },
+        additionalImages: additionalImages,
+      };
+    });
 
     return res.status(200).json({
       success: true,
