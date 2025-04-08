@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../db/config/supabase';
+import { AuthenticatedRequest } from '../shared/types';
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -29,7 +30,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       });
     }
 
-    req.user = user;
+    (req as AuthenticatedRequest).user = user;
     next();
   } catch (error) {
     console.error('Auth error:', error);

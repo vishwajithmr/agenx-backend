@@ -180,21 +180,30 @@ export const getReviews = async (req: AuthenticatedRequest, res: Response) => {
       const repliesData = repliesResults[index].data || [];
       const voteData = votesResults[index].data;
       
-      // Format replies
-      const formattedReplies = repliesData.map(reply => ({
-        id: reply.id,
-        author: {
-          id: reply.user_id,
-          name: reply.users?.name || 'User',
-          avatar: reply.users?.avatar_url || null,
-          isVerified: reply.users?.is_verified || false,
-          isCurrentUser: reply.user_id === userId,
-          isOfficial: reply.users?.is_official || false
-        },
-        date: reply.created_at,
-        formattedDate: format(new Date(reply.created_at), 'PP'),
-        content: reply.content
-      }));
+      // Format replies - Fixed to handle users data properly
+      const formattedReplies = repliesData.map(reply => {
+        // Safe access to users - handle as object or array
+        const userData = reply.users && typeof reply.users === 'object' ? 
+          (Array.isArray(reply.users) ? 
+            (reply.users.length > 0 ? reply.users[0] : null) : 
+            reply.users) : 
+          null;
+      
+        return {
+          id: reply.id,
+          author: {
+            id: reply.user_id,
+            name: userData?.name || 'User',
+            avatar: userData?.avatar_url || null,
+            isVerified: userData?.is_verified || false,
+            isCurrentUser: reply.user_id === userId,
+            isOfficial: userData?.is_official || false
+          },
+          date: reply.created_at,
+          formattedDate: format(new Date(reply.created_at), 'PP'),
+          content: reply.content
+        };
+      });
 
       // Format images
       const additionalImages = review.images ? review.images.map((img: any, imgIndex: number) => ({
@@ -680,20 +689,28 @@ export const getReviewReplies = async (req: Request, res: Response) => {
     }
 
     // Format the replies for response
-    const formattedReplies = replies.map(reply => ({
-      id: reply.id,
-      author: {
-        id: reply.user_id,
-        name: reply.users?.name || 'User',
-        avatar: reply.users?.avatar_url || null,
-        isVerified: reply.users?.is_verified || false,
-        isCurrentUser: reply.user_id === req.user?.id,
-        isOfficial: reply.users?.is_official || false
-      },
-      date: reply.created_at,
-      formattedDate: format(new Date(reply.created_at), 'PP'),
-      content: reply.content
-    }));
+    const formattedReplies = replies.map(reply => {
+      const userData = reply.users && typeof reply.users === 'object' ? 
+        (Array.isArray(reply.users) ? 
+          (reply.users.length > 0 ? reply.users[0] : null) : 
+          reply.users) : 
+        null;
+    
+      return {
+        id: reply.id,
+        author: {
+          id: reply.user_id,
+          name: userData?.name || 'User',
+          avatar: userData?.avatar_url || null,
+          isVerified: userData?.is_verified || false,
+          isCurrentUser: reply.user_id === (req as AuthenticatedRequest).user?.id,
+          isOfficial: userData?.is_official || false
+        },
+        date: reply.created_at,
+        formattedDate: format(new Date(reply.created_at), 'PP'),
+        content: reply.content
+      };
+    });
 
     return res.status(200).json({
       success: true,

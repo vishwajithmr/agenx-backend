@@ -98,6 +98,8 @@ export interface Author {
   avatar: string | null;
   isVerified: boolean;
   isOP?: boolean;
+  isCurrentUser?: boolean;
+  isOfficial?: boolean;
 }
 
 export interface DiscussionResponse {
@@ -108,9 +110,12 @@ export interface DiscussionResponse {
   score: number;
   userVote: number;
   timestamp: number;
+  formattedDate: string; // Add this property
   isPinned: boolean;
   commentCount: number;
   agentId: string;
+  lastActivity?: number; // Make this optional
+  formattedLastActivity?: string; // Add this optional property
 }
 
 export interface CommentResponse {
@@ -118,6 +123,7 @@ export interface CommentResponse {
   author: Author;
   content: string;
   timestamp: number;
+  formattedDate: string; // Add this property
   score: number;
   userVote: number;
   replyCount: number;
@@ -158,4 +164,15 @@ export interface CreateCommentRequest {
 
 export interface UpdateCommentRequest {
   content: string;
+}
+
+// Re-export all types from discussion.ts
+export * from './discussion';
+
+// Add any additional types or extend existing ones here
+import { Author as BaseAuthor } from './discussion';
+
+// Extend the Author interface to include isCurrentUser
+export interface ExtendedAuthor extends BaseAuthor {
+  isCurrentUser?: boolean;
 }

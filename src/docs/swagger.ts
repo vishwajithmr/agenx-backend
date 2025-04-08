@@ -467,7 +467,7 @@ const options = {
           }
         },
         
-        VoteRequest: {
+        DiscussionVoteRequest: {
           type: 'object',
           required: ['vote'],
           properties: {

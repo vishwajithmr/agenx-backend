@@ -7,7 +7,8 @@ import {
   UpdateCommentRequest,
   DiscussionResponse,
   CreateDiscussionRequest,
-  UpdateDiscussionRequest
+  UpdateDiscussionRequest,
+  DiscussionDetailResponse
 } from '../../../shared/types';
 import { supabase } from '../../../db/config/supabase';
 import { getAuthenticatedClient } from '../../../db/config/supabase';
@@ -18,7 +19,7 @@ import { getAuthenticatedClient } from '../../../db/config/supabase';
 export const getDiscussions = async (req: Request, res: Response) => {
   try {
     const { page = 1, limit = 20, sort = 'latest', search, agentId } = req.query;
-    const userId = req.user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
     
     if (!agentId) {
       return res.status(400).json({
@@ -119,7 +120,7 @@ export const getDiscussions = async (req: Request, res: Response) => {
           name: discussion.users?.name || 'User',
           avatar: discussion.users?.avatar_url || null,
           isVerified: discussion.users?.is_verified || false,
-          isCurrentUser: discussion.author_id === userId,
+          isOP: discussion.author_id === userId,
           isOfficial: discussion.users?.is_official || false
         },
         score: discussion.score || 0,
@@ -165,7 +166,7 @@ export const getDiscussion = async (req: Request, res: Response) => {
       commentLimit = 20, 
       commentSort = 'top' 
     } = req.query;
-    const userId = req.user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
     
     // Check if the discussion exists
     const { data: discussion, error } = await supabase
@@ -313,7 +314,7 @@ export const getDiscussion = async (req: Request, res: Response) => {
     });
     
     // Format the complete discussion response
-    const formattedDiscussion: DiscussionResponse = {
+    const formattedDiscussion: DiscussionDetailResponse = {
       id: discussion.id,
       title: discussion.title,
       content: discussion.content,
@@ -322,6 +323,7 @@ export const getDiscussion = async (req: Request, res: Response) => {
         name: discussion.users?.name || 'User',
         avatar: discussion.users?.avatar_url || null,
         isVerified: discussion.users?.is_verified || false,
+        isOP: true,
         isCurrentUser: discussion.author_id === userId,
         isOfficial: discussion.users?.is_official || false
       },
@@ -474,7 +476,7 @@ export const createDiscussion = async (req: AuthenticatedRequest, res: Response)
     }
     
     // Format the response
-    const formattedDiscussion: DiscussionResponse = {
+    const formattedDiscussion: DiscussionDetailResponse = {
       id: discussion.id,
       title: discussion.title,
       content: discussion.content,
@@ -483,6 +485,7 @@ export const createDiscussion = async (req: AuthenticatedRequest, res: Response)
         name: userData?.name || 'User',
         avatar: userData?.avatar_url || null,
         isVerified: userData?.is_verified || false,
+        isOP: true,
         isCurrentUser: true,
         isOfficial: userData?.is_official || false
       },
@@ -980,7 +983,7 @@ export const getComments = async (req: Request, res: Response) => {
       sort = 'top', 
       parentCommentId = null 
     } = req.query;
-    const userId = req.user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
     
     const offset = (Number(page) - 1) * Number(limit);
     
@@ -1596,6 +1599,7 @@ export const updateComment = async (req: AuthenticatedRequest, res: Response) =>
       },
       content: comment.content,
       timestamp: new Date(comment.created_at).getTime(),
+      formattedDate: format(new Date(comment.created_at), 'PP'),
       score: comment.score,
       userVote,
       replyCount: comment.reply_count
@@ -1710,7 +1714,7 @@ export const deleteComment = async (req: AuthenticatedRequest, res: Response) =>
 export const getNestedComments = async (req: Request, res: Response) => {
   try {
     const { discussionId } = req.params;
-    const userId = req.user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
     
     // Check if the discussion exists
     const { data: discussion, error: discussionError } = await supabase

@@ -8,14 +8,16 @@ import { createClient } from '@supabase/supabase-js';
  */
 function getAuthenticatedClient(req: AuthenticatedRequest) {
   const supabaseUrl = process.env.SUPABASE_URL || '';
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
   
-  if (req.user?.accessToken) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
     // Create a new client with the user's JWT token
     return createClient(supabaseUrl, supabaseKey, {
       global: {
         headers: {
-          Authorization: `Bearer ${req.user.accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
       },
     });
@@ -35,7 +37,7 @@ export const getAllAgents = async (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     // Use authenticated client if available
-    const client = req.user?.accessToken ? 
+    const client = req.headers.authorization ? 
       getAuthenticatedClient(req as AuthenticatedRequest) : 
       supabase;
 
@@ -392,7 +394,7 @@ export const viewAgent = async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // Use authenticated client if available
-    const client = req.user?.accessToken ? 
+    const client = req.headers.authorization ? 
       getAuthenticatedClient(req as AuthenticatedRequest) : 
       supabase;
 
@@ -440,7 +442,7 @@ export const viewAgent = async (req: Request, res: Response) => {
 export const searchAgents = async (req: Request, res: Response) => {
   try {
     const { query, page = 1, limit = 10 } = req.query;
-    const userId = req.user?.id;
+    const userId = (req as AuthenticatedRequest).user?.id;
 
     if (!query || typeof query !== 'string' || query.trim() === '') {
       return res.status(400).json({
@@ -455,7 +457,7 @@ export const searchAgents = async (req: Request, res: Response) => {
     const offset = (Number(page) - 1) * Number(limit);
 
     // Use authenticated client if available
-    const client = req.user?.accessToken
+    const client = req.headers.authorization
       ? getAuthenticatedClient(req as AuthenticatedRequest)
       : supabase;
 
@@ -478,7 +480,7 @@ export const searchAgents = async (req: Request, res: Response) => {
     }
 
     // Transform the data
-    const transformedAgents = agents.map(agent => ({
+    const transformedAgents = agents.map((agent: any) => ({
       ...transformAgent(agent),
       isLiked: userId ? false : undefined, // Placeholder for future like logic
       isOwner: agent.creator_id === userId
@@ -512,7 +514,7 @@ export const searchAgents = async (req: Request, res: Response) => {
 export const getFeaturedAgents = async (req: Request, res: Response) => {
   try {
     // Use authenticated client if available
-    const client = req.user?.accessToken ? 
+    const client = req.headers.authorization ? 
       getAuthenticatedClient(req as AuthenticatedRequest) : 
       supabase;
     
@@ -537,7 +539,7 @@ export const getFeaturedAgents = async (req: Request, res: Response) => {
 export const getTrendingAgents = async (req: Request, res: Response) => {
   try {
     // Use authenticated client if available
-    const client = req.user?.accessToken ? 
+    const client = req.headers.authorization ? 
       getAuthenticatedClient(req as AuthenticatedRequest) : 
       supabase;
     
