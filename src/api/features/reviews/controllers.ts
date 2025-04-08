@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { format } from 'date-fns';
-import { supabase } from '../../../db/config/supabase';
+import { supabase, getAuthenticatedClient } from '../../../db/config/supabase';
 import { ReviewResponse, ReviewSummary, AuthenticatedRequest } from '../../../shared/types';
 
 /**
@@ -262,11 +262,9 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
     const { agentId } = req.params;
     const { rating, content, images } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    console.log('Authenticated user ID:', userId); // Debugging log
-
-    // Validation checks
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -276,6 +274,7 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
       });
     }
 
+    // Validation checks
     if (!rating || !content) {
       return res.status(400).json({
         success: false,
@@ -316,8 +315,11 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
       });
     }
 
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
+
     // Check if user has already reviewed this agent
-    const { data: existingReview, error: checkError } = await supabase
+    const { data: existingReview, error: checkError } = await authenticatedSupabase
       .from('reviews')
       .select('id')
       .eq('agent_id', agentId)
@@ -335,7 +337,7 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Insert the review with images
-    const { data: reviewData, error: insertError } = await supabase
+    const { data: reviewData, error: insertError } = await authenticatedSupabase
       .from('reviews')
       .insert({
         agent_id: agentId,
@@ -363,9 +365,9 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
       .from('users')
       .select('name, avatar_url')
       .eq('id', userId)
-      .single();
+      .maybeSingle(); // Changed from single() to maybeSingle()
 
-    if (userError) {
+    if (userError && userError.code !== 'PGRST116') {
       console.error('Error fetching user data:', userError);
     }
 
@@ -381,7 +383,7 @@ export const submitReview = async (req: AuthenticatedRequest, res: Response) => 
       formattedDate: format(new Date(reviewData.created_at), 'PP'),
       author: {
         id: userId,
-        name: userData?.name || 'User',
+        name: userData?.name || 'Anonymous User', // Default name if missing
         avatar: userData?.avatar_url || null,
         isVerified: false,
         isCurrentUser: true
@@ -412,8 +414,9 @@ export const editReview = async (req: AuthenticatedRequest, res: Response) => {
     const { reviewId } = req.params;
     const { rating, content, images } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -423,8 +426,11 @@ export const editReview = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
+
     // Check if review exists and belongs to user
-    const { data: existingReview, error: checkError } = await supabase
+    const { data: existingReview, error: checkError } = await authenticatedSupabase
       .from('reviews')
       .select('user_id, created_at')
       .eq('id', reviewId)
@@ -497,7 +503,7 @@ export const editReview = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     // Update the review
-    const { data: updatedReview, error: updateError } = await supabase
+    const { data: updatedReview, error: updateError } = await authenticatedSupabase
       .from('reviews')
       .update({
         rating,
@@ -543,8 +549,9 @@ export const deleteReview = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const { reviewId } = req.params;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -554,8 +561,11 @@ export const deleteReview = async (req: AuthenticatedRequest, res: Response) => 
       });
     }
 
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
+
     // Check if review exists and belongs to user
-    const { data: existingReview, error: checkError } = await supabase
+    const { data: existingReview, error: checkError } = await authenticatedSupabase
       .from('reviews')
       .select('user_id')
       .eq('id', reviewId)
@@ -582,7 +592,7 @@ export const deleteReview = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Delete the review
-    const { error } = await supabase
+    const { error } = await authenticatedSupabase
       .from('reviews')
       .delete()
       .eq('id', reviewId);
@@ -736,8 +746,9 @@ export const addReviewReply = async (req: AuthenticatedRequest, res: Response) =
     const { reviewId } = req.params;
     const { content } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1]; // Extract token from Authorization header
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -768,8 +779,11 @@ export const addReviewReply = async (req: AuthenticatedRequest, res: Response) =
       });
     }
 
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
+
     // Check if the review exists
-    const { data: review, error: reviewError } = await supabase
+    const { data: review, error: reviewError } = await authenticatedSupabase
       .from('reviews')
       .select('id')
       .eq('id', reviewId)
@@ -785,8 +799,8 @@ export const addReviewReply = async (req: AuthenticatedRequest, res: Response) =
       });
     }
 
-    // Insert the reply
-    const { data: replyData, error: insertError } = await supabase
+    // Insert the reply with authenticated client
+    const { data: replyData, error: insertError } = await authenticatedSupabase
       .from('review_replies')
       .insert({
         review_id: reviewId,
@@ -812,9 +826,9 @@ export const addReviewReply = async (req: AuthenticatedRequest, res: Response) =
       .from('users')
       .select('name, avatar_url, is_verified, is_official')
       .eq('id', userId)
-      .single();
+      .maybeSingle(); // Changed from single() to maybeSingle()
 
-    if (userError) {
+    if (userError && userError.code !== 'PGRST116') {
       console.error('Error fetching user data:', userError);
     }
 
@@ -823,7 +837,7 @@ export const addReviewReply = async (req: AuthenticatedRequest, res: Response) =
       id: replyData.id,
       author: {
         id: userId,
-        name: userData?.name || 'User',
+        name: userData?.name || 'Anonymous User', // Default name if missing
         avatar: userData?.avatar_url || null,
         isVerified: userData?.is_verified || false,
         isCurrentUser: true,
@@ -858,8 +872,9 @@ export const updateReviewReply = async (req: AuthenticatedRequest, res: Response
     const { replyId } = req.params;
     const { content } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -868,6 +883,9 @@ export const updateReviewReply = async (req: AuthenticatedRequest, res: Response
         }
       });
     }
+
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
 
     // Validation checks
     if (!content) {
@@ -891,7 +909,7 @@ export const updateReviewReply = async (req: AuthenticatedRequest, res: Response
     }
 
     // Check if the reply exists and belongs to the user
-    const { data: reply, error: replyError } = await supabase
+    const { data: reply, error: replyError } = await authenticatedSupabase
       .from('review_replies')
       .select('user_id, created_at')
       .eq('id', replyId)
@@ -933,7 +951,7 @@ export const updateReviewReply = async (req: AuthenticatedRequest, res: Response
     }
 
     // Update the reply
-    const { data: updatedReply, error: updateError } = await supabase
+    const { data: updatedReply, error: updateError } = await authenticatedSupabase
       .from('review_replies')
       .update({
         content,
@@ -959,14 +977,18 @@ export const updateReviewReply = async (req: AuthenticatedRequest, res: Response
       .from('users')
       .select('name, avatar_url, is_verified, is_official')
       .eq('id', userId)
-      .single();
+      .maybeSingle(); // Changed from single() to maybeSingle()
+
+    if (userError && userError.code !== 'PGRST116') {
+      console.error('Error fetching user data:', userError);
+    }
 
     // Format the response
     const replyResponse = {
       id: updatedReply.id,
       author: {
         id: userId,
-        name: userData?.name || 'User',
+        name: userData?.name || 'Anonymous User', // Default name if missing
         avatar: userData?.avatar_url || null,
         isVerified: userData?.is_verified || false,
         isCurrentUser: true,
@@ -1000,8 +1022,9 @@ export const deleteReviewReply = async (req: AuthenticatedRequest, res: Response
   try {
     const { replyId } = req.params;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -1011,8 +1034,11 @@ export const deleteReviewReply = async (req: AuthenticatedRequest, res: Response
       });
     }
 
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
+
     // Check if the reply exists and belongs to the user
-    const { data: reply, error: replyError } = await supabase
+    const { data: reply, error: replyError } = await authenticatedSupabase
       .from('review_replies')
       .select('user_id')
       .eq('id', replyId)
@@ -1039,7 +1065,7 @@ export const deleteReviewReply = async (req: AuthenticatedRequest, res: Response
     }
 
     // Delete the reply
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await authenticatedSupabase
       .from('review_replies')
       .delete()
       .eq('id', replyId);
@@ -1079,8 +1105,9 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
     const { reviewId } = req.params;
     const { vote } = req.body;
     const userId = req.user?.id;
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-    if (!userId) {
+    if (!userId || !authToken) {
       return res.status(401).json({
         success: false,
         error: {
@@ -1089,6 +1116,9 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
         }
       });
     }
+
+    // Get authenticated client
+    const authenticatedSupabase = getAuthenticatedClient(authToken);
 
     // Validation checks
     if (vote !== 1 && vote !== -1 && vote !== 0) {
@@ -1102,7 +1132,7 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Check if the review exists
-    const { data: review, error: reviewError } = await supabase
+    const { data: review, error: reviewError } = await authenticatedSupabase
       .from('reviews')
       .select('id')
       .eq('id', reviewId)
@@ -1119,20 +1149,18 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Check if user already voted
-    const { data: existingVote, error: voteCheckError } = await supabase
+    const { data: existingVote, error: voteCheckError } = await authenticatedSupabase
       .from('review_votes')
       .select('id, vote')
       .eq('review_id', reviewId)
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Handle the vote based on existing vote
-    let result;
-    
+    // Handle vote operations with authenticated client
     if (existingVote) {
       if (vote === 0) {
         // Remove vote
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await authenticatedSupabase
           .from('review_votes')
           .delete()
           .eq('id', existingVote.id);
@@ -1149,7 +1177,7 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
         }
       } else if (existingVote.vote !== vote) {
         // Update vote
-        const { error: updateError } = await supabase
+        const { error: updateError } = await authenticatedSupabase
           .from('review_votes')
           .update({ vote, updated_at: new Date().toISOString() })
           .eq('id', existingVote.id);
@@ -1169,7 +1197,7 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
       }
     } else if (vote !== 0) {
       // Create new vote
-      const { error: insertError } = await supabase
+      const { error: insertError } = await authenticatedSupabase
         .from('review_votes')
         .insert({
           review_id: reviewId,
@@ -1190,7 +1218,7 @@ export const voteOnReview = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     // Get updated vote counts
-    const { data: voteStats, error: statsError } = await supabase
+    const { data: voteStats, error: statsError } = await authenticatedSupabase
       .from('reviews')
       .select('upvotes, downvotes')
       .eq('id', reviewId)
