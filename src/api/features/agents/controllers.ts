@@ -435,17 +435,65 @@ export const viewAgent = async (req: Request, res: Response) => {
 
 /**
  * Search for agents
+ * @route GET /agents/search
  */
 export const searchAgents = async (req: Request, res: Response) => {
   try {
+    const { query, page = 1, limit = 10 } = req.query;
+    const userId = req.user?.id;
+
+    if (!query || typeof query !== 'string' || query.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'invalid_query',
+          message: 'Search query is required'
+        }
+      });
+    }
+
+    const offset = (Number(page) - 1) * Number(limit);
+
     // Use authenticated client if available
-    const client = req.user?.accessToken ? 
-      getAuthenticatedClient(req as AuthenticatedRequest) : 
-      supabase;
-    
-    // Implement search with the appropriate client
-    
-    // ...existing code...
+    const client = req.user?.accessToken
+      ? getAuthenticatedClient(req as AuthenticatedRequest)
+      : supabase;
+
+    // Call the search_agents RPC function
+    const { data: agents, error } = await client.rpc('search_agents', {
+      search_query: query.trim(),
+      poffset: offset,
+      plimit: Number(limit)
+    });
+
+    if (error) {
+      console.error('Error searching agents:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'search_error',
+          message: 'Error performing search'
+        }
+      });
+    }
+
+    // Transform the data
+    const transformedAgents = agents.map(agent => ({
+      ...transformAgent(agent),
+      isLiked: userId ? false : undefined, // Placeholder for future like logic
+      isOwner: agent.creator_id === userId
+    }));
+
+    return res.status(200).json({
+      success: true,
+      agents: transformedAgents,
+      pagination: {
+        total: agents.length,
+        page: Number(page),
+        limit: Number(limit),
+        pages: Math.ceil(agents.length / Number(limit))
+      }
+    });
   } catch (error) {
     console.error('Error in searchAgents:', error);
     return res.status(500).json({
