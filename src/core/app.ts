@@ -14,7 +14,7 @@ const app = express();
 app.use(helmet());
 // Configure CORS to allow requests with credentials
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yourproductionsite.com'], // Add your frontend origins
+  origin: ['http://localhost:3000', 'https://agenx-frontend.vercel.app','https://agenx.in'], // Add your frontend origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
